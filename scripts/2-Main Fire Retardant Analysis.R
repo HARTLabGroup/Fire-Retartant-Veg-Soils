@@ -167,6 +167,7 @@ comm.dat <- as.matrix(comm.sum) ## making a sep df to test comm. data
 soils <- soils[order(soils$Field.ID),]
 soils.dat <- as.matrix(soils[,c(5:16)])
 rownames(soils.dat) <- soils$Field.ID
+env <- env[order(env$plot),]
 sites <- factor(env$site) ## the sites are not perfectly ordered so I have to use these numbers
 sev <- factor(env$sev, levels = c("unburn","low","mod","high"))
 trt <- factor(env$trt)
@@ -952,20 +953,32 @@ match(colnames(status), sp.info$code)
 
 native <- status[,colnames(status) %in% sp.info$code[sp.info$status == "N"]]
 invasive <- status[,colnames(status) %in% sp.info$code[sp.info$status == "I"]]
+annual <- status[,colnames(status) %in% sp.info$code[sp.info$duration == "annual"]]
+perennial <- status[,colnames(status) %in% sp.info$code[sp.info$duration == "perennial"]]
 
 env$X <- NULL
 
 native.cov <- data.frame(native.cov = apply(native, 1 , sum),
                          plot = rownames(native))
-env$native.cov <- native.cov$native.cov[match(native.cov$plot, env$plot)]
 invasive.cov <- data.frame(invasive.cov = apply(invasive,1,sum),
                            plot = rownames(invasive))
+annual.cov <- data.frame(annual.cov = apply(annual, 1 , sum),
+                         plot = rownames(annual))
+perennial.cov <- data.frame(perennial.cov = apply(perennial, 1 , sum),
+                         plot = rownames(perennial))
+env$native.cov <- native.cov$native.cov[match(native.cov$plot, env$plot)]
 env$invasive.cov <- invasive.cov$invasive.cov[match(invasive.cov$plot, env$plot)]
+env$annual.cov <- annual.cov$annual.cov[match(annual.cov$plot, env$plot)]
+env$perennial.cov <- perennial.cov$perennial.cov[match(perennial.cov$plot, env$plot)]
+
 env$prop.inv.cov <- env$invasive.cov/(env$native.cov+env$invasive.cov)
+env$prop.ann.cov <- env$annual.cov/(env$perennial.cov+env$annual.cov)
 hist(env$prop.inv.cov)
+hist(env$prop.ann.cov)
 
 grad <- native.cov
 grad$invasive.cov <- invasive.cov$invasive.cov[match(grad$plot, invasive.cov$plot)]
+grad$annual.cov <- annual.cov$annual.cov[match(grad$plot, annual.cov$plot)]
 grad$plot.cov <- PlotCov$TotalPlotCover[match(grad$plot, rownames(PlotCov))]
 grad$plot.rich <- PlotRichness$richness[match(grad$plot, rownames(PlotRichness))]
 grad$NO3 <- soils$NO3[match(grad$plot, soils$Field.ID)]
@@ -973,6 +986,7 @@ grad$NH4 <- soils$NH4[match(grad$plot, soils$Field.ID)]
 grad$PO4 <- soils$PO4[match(grad$plot, soils$Field.ID)]
 grad$site <- soils$Location[match(grad$plot, soils$Field.ID)]
 grad$prop.inv <- grad$invasive.cov/grad$plot.cov
+grad$prop.ann <- grad$annual.cov/grad$plot.cov
 grad$trt <- PlotCov$trt[match(grad$plot, rownames(PlotCov))]
 grad$sev <- PlotCov$sev[match(grad$plot, rownames(PlotCov))]
 
@@ -980,15 +994,26 @@ rm(native.cov);rm(invasive.cov)
 
 native <- ifelse(native > 0, 1,0)
 invasive <- ifelse(invasive > 0,1,0)
+annual <- ifelse(annual > 0, 1,0)
+perennial <- ifelse(perennial > 0,1,0)
 
 env$native.sp <- apply(native, 1 , sum)
 env$invasive.sp <- apply(invasive, 1, sum)
+env$annual.sp <- apply(annual, 1 , sum)
+env$perennial.sp <- apply(perennial, 1, sum)
+
 env$prop.inv.sp <- env$invasive.sp/(env$native.sp+env$invasive.sp)
 grad$prop.inv.sp <- env$prop.inv.sp[match(grad$plot, env$plot)]
+env$prop.ann.sp <- env$annual.sp/(env$perennial.sp+env$annual.sp)
+grad$prop.ann.sp <- env$prop.ann.sp[match(grad$plot, env$plot)]
 hist(env$prop.inv.sp)
+hist(env$prop.ann.sp)
 
 hist(env$prop.inv.sp[env$trt == "con"])
 hist(env$prop.inv.sp[env$trt == "fr"])
+
+hist(env$prop.ann.sp[env$trt == "con"])
+hist(env$prop.ann.sp[env$trt == "fr"])
 
 #### Linear Models to address Q2 ####
 grad$trt <- factor(grad$trt, levels = c("con", "fr"))
@@ -1004,38 +1029,64 @@ sc.grad <- grad[grad$site == "Stone Canyon",]
 ## response ~ soils + trt + severity
 summary(lm(plot.cov ~ NO3+NH4+PO4+trt+sev,data = q.grad)) ## keeping in the trt and sev to control for it
 summary(lm(prop.inv ~ NO3+NH4+PO4+trt+sev,data = q.grad))
+summary(lm(prop.ann ~ NO3+NH4+PO4+trt+sev,data = q.grad))
 summary(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = q.grad, family = poisson(link = "log")))
 pseudo.R.squared(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = q.grad, family = poisson(link = "log")))
 summary(lm(prop.inv.sp ~ NO3+NH4+PO4+trt+sev,data = q.grad))
+summary(lm(prop.ann.sp ~ NO3+NH4+PO4+trt+sev,data = q.grad))
+
 
 ## Stone canyon
 ## response ~ soils + trt + severity
 summary(lm(plot.cov ~ NO3+NH4+PO4+trt+sev,data = sc.grad)) ## keeping in the trt and sev to control for it
 summary(lm(prop.inv ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
+summary(lm(prop.ann ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
 summary(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = sc.grad, family = poisson(link = "log")))
 pseudo.R.squared(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = sc.grad, family = poisson(link = "log")))
 summary(lm(prop.inv.sp ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
+summary(lm(prop.ann.sp ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
 
 
 #### Figure 2 - Richness ####
 se <- function(x){sd(x)/sqrt(length(x))} ## creating a function for standard error
-PlotRichness$plotting <- ifelse(PlotRichness$sev == "unburn" & PlotRichness$tr == "con", "UCON",
-                                ifelse(PlotRichness$sev == "unburn" & PlotRichness$tr == "fr", "UFR",
-                                       ifelse(PlotRichness$sev == "low" & PlotRichness$tr == "con", "LCON",
-                                              ifelse(PlotRichness$sev == "low" & PlotRichness$tr == "fr", "LFR", 
-                                                     ifelse(PlotRichness$sev == "mod" & PlotRichness$tr == "con", "MCON",
-                                                            ifelse(PlotRichness$sev == "mod" & PlotRichness$tr == "fr", "MFR",
-                                                                   ifelse(PlotRichness$sev == "high" & PlotRichness$tr == "con", "HCON",
-                                                                          ifelse(PlotRichness$sev == "high" & PlotRichness$tr == "fr", "HFR", NA))))))))
-Fig2order <- c("UCON","LCON")
-vec1 <- c(0.9,1.9)
-Fig2paired <- c("UFR","LFR")
-vec2 <- c(1.1,2.1)
+sc.grad$plotting <- ifelse(sc.grad$sev == "unburn" & sc.grad$tr == "con", "UCON",
+                           ifelse(sc.grad$sev == "unburn" & sc.grad$tr == "fr", "UFR",
+                                  ifelse(sc.grad$sev == "low" & sc.grad$tr == "con", "LCON",
+                                         ifelse(sc.grad$sev == "low" & sc.grad$tr == "fr", "LFR", 
+                                                ifelse(sc.grad$sev == "mod" & sc.grad$tr == "con", "MCON",
+                                                       ifelse(sc.grad$sev == "mod" & sc.grad$tr == "fr", "MFR",
+                                                              ifelse(sc.grad$sev == "high" & sc.grad$tr == "con", "HCON",
+                                                                     ifelse(sc.grad$sev == "high" & sc.grad$tr == "fr", "HFR", NA))))))))
+q.grad$plotting <- ifelse(q.grad$sev == "unburn" & q.grad$tr == "con", "UCON",
+                           ifelse(q.grad$sev == "unburn" & q.grad$tr == "fr", "UFR",
+                                  ifelse(q.grad$sev == "low" & q.grad$tr == "con", "LCON",
+                                         ifelse(q.grad$sev == "low" & q.grad$tr == "fr", "LFR", 
+                                                ifelse(q.grad$sev == "mod" & q.grad$tr == "con", "MCON",
+                                                       ifelse(q.grad$sev == "mod" & q.grad$tr == "fr", "MFR",
+                                                              ifelse(q.grad$sev == "high" & q.grad$tr == "con", "HCON",
+                                                                     ifelse(q.grad$sev == "high" & q.grad$tr == "fr", "HFR", NA))))))))
 
-par(mfrow = c(2,2))
+## setting figure parameters 
+Fig2order.sc <- c("UCON","LCON")
+vec1.sc <- c(0.9,1.9)
+Fig2paired.sc <- c("UFR","LFR")
+vec2.sc <- c(1.1,2.1)
+
+Fig2order.q <- c("UCON","LCON","MCON","HCON")
+vec1.q <- c(0.9,1.9,2.9,3.9)
+Fig2paired.q <- c("UFR","LFR","MFR","HFR")
+vec2.q <- c(1.1,2.1,3.1,4.1)
+
+SC <- sc.grad
+Quarry <- q.grad
+
+par(mfrow = c(3,2))
+
+## change the nut variable (borrowed from soils code) based on the column name in grad df
+nut <- 'plot.rich'
 plot(x = c(0.5:2.5),
      y = c(0.5:2.5),
-     ylim = c(0,max(PlotRichness$richness)),
+     ylim = c(0,max(grad[,nut])),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -1043,43 +1094,37 @@ plot(x = c(0.5:2.5),
      xaxt = "n",
      xlab = "") ## disturbance history
 axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-SC <- PlotRichness[PlotRichness$site == "sc",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(SC$richness[SC$plotting == Fig2order[i]])),
-         y = SC$richness[SC$plotting == Fig2order[i]],
+for(i in 1:length(Fig2order.sc)){
+  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(SC$richness[SC$plotting == Fig2paired[i]])),
-         y = SC$richness[SC$plotting == Fig2paired[i]],
+  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(SC$richness[SC$plotting == Fig2order[i]]),
+  points(x = vec1.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$richness[SC$plotting == Fig2order[i]])-se(SC$richness[SC$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(SC$richness[SC$plotting == Fig2order[i]])+se(SC$richness[SC$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(SC$richness[SC$plotting == Fig2paired[i]]),
+  points(x = vec2.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$richness[SC$plotting == Fig2paired[i]])-se(SC$richness[SC$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(SC$richness[SC$plotting == Fig2paired[i]])+se(SC$richness[SC$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
 
-Fig2order <- c("UCON","LCON","MCON","HCON")
-vec1 <- c(0.9,1.9,2.9,3.9)
-Fig2paired <- c("UFR","LFR","MFR","HFR")
-vec2 <- c(1.1,2.1,3.1,4.1)
-
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
-     ylim = c(0,max(PlotRichness$richness)),
+     ylim = c(0,max(grad[,nut])),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -1087,44 +1132,116 @@ plot(x = c(0.5:4.5),
      xaxt = "n",
      xlab = "") ## disturbance history
 axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-
-Quarry <- PlotRichness[PlotRichness$site == "quarry",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(Quarry$richness[Quarry$plotting == Fig2order[i]])),
-         y = Quarry$richness[Quarry$plotting == Fig2order[i]],
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(Quarry$richness[Quarry$plotting == Fig2paired[i]])),
-         y = Quarry$richness[Quarry$plotting == Fig2paired[i]],
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(Quarry$richness[Quarry$plotting == Fig2order[i]]),
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$richness[Quarry$plotting == Fig2order[i]])-se(Quarry$richness[Quarry$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(Quarry$richness[Quarry$plotting == Fig2order[i]])+se(Quarry$richness[Quarry$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(Quarry$richness[Quarry$plotting == Fig2paired[i]]),
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$richness[Quarry$plotting == Fig2paired[i]])-se(Quarry$richness[Quarry$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(Quarry$richness[Quarry$plotting == Fig2paired[i]])+se(Quarry$richness[Quarry$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
 
-rm(Quarry);rm(SC);rm(Fig2order);rm(Fig2paired);rm(i);rm(vec1);rm(vec2)
+## change the nutrients of interest based on the column name in soils df
+nut <- 'prop.inv.sp'
+plot(x = c(0.5:2.5),
+     y = c(0.5:2.5),
+     ylim = c(0,1),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
+abline(h = 0.5, lty = 2)
+for(i in 1:length(Fig2order.sc)){
+  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
 
-Fig2order <- c("UCON","LCON")
-vec1 <- c(0.9,1.9)
-Fig2paired <- c("UFR","LFR")
-vec2 <- c(1.1,2.1)
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,1),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+abline(h = 0.5, lty = 2)
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
 
-PlotRichness$prop.inv.sp <- env$prop.inv.sp
+## change the nutrients of interest based on the column name in soils df
+nut <- 'prop.ann.sp'
 plot(x = c(0.5:2.5),
      y = c(0.5:2.5),
      ylim = c(0,1),
@@ -1136,39 +1253,33 @@ plot(x = c(0.5:2.5),
      xlab = "") ## disturbance history
 abline(h = 0.5, lty = 2)
 axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-SC <- PlotRichness[PlotRichness$site == "sc",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(SC$prop.inv.sp[SC$plotting == Fig2order[i]])),
-         y = SC$prop.inv.sp[SC$plotting == Fig2order[i]],
+for(i in 1:length(Fig2order.sc)){
+  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(SC$prop.inv.sp[SC$plotting == Fig2paired[i]])),
-         y = SC$prop.inv.sp[SC$plotting == Fig2paired[i]],
+  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(SC$prop.inv.sp[SC$plotting == Fig2order[i]]),
+  points(x = vec1.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$prop.inv.sp[SC$plotting == Fig2order[i]])-se(SC$prop.inv.sp[SC$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(SC$prop.inv.sp[SC$plotting == Fig2order[i]])+se(SC$prop.inv.sp[SC$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(SC$prop.inv.sp[SC$plotting == Fig2paired[i]]),
+  points(x = vec2.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$prop.inv.sp[SC$plotting == Fig2paired[i]])-se(SC$prop.inv.sp[SC$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(SC$prop.inv.sp[SC$plotting == Fig2paired[i]])+se(SC$prop.inv.sp[SC$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
-
-Fig2order <- c("UCON","LCON","MCON","HCON")
-vec1 <- c(0.9,1.9,2.9,3.9)
-Fig2paired <- c("UFR","LFR","MFR","HFR")
-vec2 <- c(1.1,2.1,3.1,4.1)
 
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
@@ -1181,56 +1292,42 @@ plot(x = c(0.5:4.5),
      xlab = "") ## disturbance history
 abline(h = 0.5, lty = 2)
 axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-
-Quarry <- PlotRichness[PlotRichness$site == "quarry",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(Quarry$prop.inv.sp[Quarry$plotting == Fig2order[i]])),
-         y = Quarry$prop.inv.sp[Quarry$plotting == Fig2order[i]],
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(Quarry$prop.inv.sp[Quarry$plotting == Fig2paired[i]])),
-         y = Quarry$prop.inv.sp[Quarry$plotting == Fig2paired[i]],
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(Quarry$prop.inv.sp[Quarry$plotting == Fig2order[i]]),
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$prop.inv.sp[Quarry$plotting == Fig2order[i]])-se(Quarry$prop.inv.sp[Quarry$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(Quarry$prop.inv.sp[Quarry$plotting == Fig2order[i]])+se(Quarry$prop.inv.sp[Quarry$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(Quarry$prop.inv.sp[Quarry$plotting == Fig2paired[i]]),
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$prop.inv.sp[Quarry$plotting == Fig2paired[i]])-se(Quarry$prop.inv.sp[Quarry$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(Quarry$prop.inv.sp[Quarry$plotting == Fig2paired[i]])+se(Quarry$prop.inv.sp[Quarry$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
-
-rm(Quarry);rm(SC);rm(Fig2order);rm(Fig2paired);rm(i);rm(vec1);rm(vec2)
-
 
 #### Figure 3 - Cover ####
-PlotCov$plotting <- ifelse(PlotCov$sev == "unburn" & PlotCov$tr == "con", "UCON",
-                           ifelse(PlotCov$sev == "unburn" & PlotCov$tr == "fr", "UFR",
-                                  ifelse(PlotCov$sev == "low" & PlotCov$tr == "con", "LCON",
-                                         ifelse(PlotCov$sev == "low" & PlotCov$tr == "fr", "LFR", 
-                                                ifelse(PlotCov$sev == "mod" & PlotCov$tr == "con", "MCON",
-                                                       ifelse(PlotCov$sev == "mod" & PlotCov$tr == "fr", "MFR",
-                                                              ifelse(PlotCov$sev == "high" & PlotCov$tr == "con", "HCON",
-                                                                     ifelse(PlotCov$sev == "high" & PlotCov$tr == "fr", "HFR", NA))))))))
-Fig2order <- c("UCON","LCON")
-vec1 <- c(0.9,1.9)
-Fig2paired <- c("UFR","LFR")
-vec2 <- c(1.1,2.1)
+par(mfrow = c(3,2))
 
+## change the nut variable (borrowed from soils code) based on the column name in grad df
+nut <- 'plot.cov'
 plot(x = c(0.5:2.5),
      y = c(0.5:2.5),
-     ylim = c(0,max(PlotCov$TotalPlotCover)),
+     ylim = c(0,max(grad[,nut])),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -1238,43 +1335,37 @@ plot(x = c(0.5:2.5),
      xaxt = "n",
      xlab = "") ## disturbance history
 axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-SC <- PlotCov[PlotCov$site == "sc",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(SC$TotalPlotCover[SC$plotting == Fig2order[i]])),
-         y = SC$TotalPlotCover[SC$plotting == Fig2order[i]],
+for(i in 1:length(Fig2order.sc)){
+  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(SC$TotalPlotCover[SC$plotting == Fig2paired[i]])),
-         y = SC$TotalPlotCover[SC$plotting == Fig2paired[i]],
+  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(SC$TotalPlotCover[SC$plotting == Fig2order[i]]),
+  points(x = vec1.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$TotalPlotCover[SC$plotting == Fig2order[i]])-se(SC$TotalPlotCover[SC$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(SC$TotalPlotCover[SC$plotting == Fig2order[i]])+se(SC$TotalPlotCover[SC$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(SC$TotalPlotCover[SC$plotting == Fig2paired[i]]),
+  points(x = vec2.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$TotalPlotCover[SC$plotting == Fig2paired[i]])-se(SC$TotalPlotCover[SC$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(SC$TotalPlotCover[SC$plotting == Fig2paired[i]])+se(SC$TotalPlotCover[SC$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
 
-Fig2order <- c("UCON","LCON","MCON","HCON")
-vec1 <- c(0.9,1.9,2.9,3.9)
-Fig2paired <- c("UFR","LFR","MFR","HFR")
-vec2 <- c(1.1,2.1,3.1,4.1)
-
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
-     ylim = c(0,max(PlotCov$TotalPlotCover)),
+     ylim = c(0,max(grad[,nut])),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -1282,45 +1373,36 @@ plot(x = c(0.5:4.5),
      xaxt = "n",
      xlab = "") ## disturbance history
 axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-
-Quarry <- PlotCov[PlotCov$site == "quarry",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(Quarry$TotalPlotCover[Quarry$plotting == Fig2order[i]])),
-         y = Quarry$TotalPlotCover[Quarry$plotting == Fig2order[i]],
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(Quarry$TotalPlotCover[Quarry$plotting == Fig2paired[i]])),
-         y = Quarry$TotalPlotCover[Quarry$plotting == Fig2paired[i]],
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(Quarry$TotalPlotCover[Quarry$plotting == Fig2order[i]]),
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$TotalPlotCover[Quarry$plotting == Fig2order[i]])-se(Quarry$TotalPlotCover[Quarry$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(Quarry$TotalPlotCover[Quarry$plotting == Fig2order[i]])+se(Quarry$TotalPlotCover[Quarry$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(Quarry$TotalPlotCover[Quarry$plotting == Fig2paired[i]]),
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$TotalPlotCover[Quarry$plotting == Fig2paired[i]])-se(Quarry$TotalPlotCover[Quarry$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(Quarry$TotalPlotCover[Quarry$plotting == Fig2paired[i]])+se(Quarry$TotalPlotCover[Quarry$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
 
-rm(Quarry);rm(SC);rm(Fig2order);rm(Fig2paired);rm(i);rm(vec1);rm(vec2)
-
-
-PlotCov$prop.inv.cov <- env$prop.inv.cov
-Fig2order <- c("UCON","LCON")
-vec1 <- c(0.9,1.9)
-Fig2paired <- c("UFR","LFR")
-vec2 <- c(1.1,2.1)
-
+## change the nutrients of interest based on the column name in soils df
+nut <- 'prop.inv'
 plot(x = c(0.5:2.5),
      y = c(0.5:2.5),
      ylim = c(0,1),
@@ -1330,41 +1412,35 @@ plot(x = c(0.5:2.5),
      type = "n",
      xaxt = "n",
      xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
 axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-SC <- PlotCov[PlotCov$site == "sc",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(SC$prop.inv.cov[SC$plotting == Fig2order[i]])),
-         y = SC$prop.inv.cov[SC$plotting == Fig2order[i]],
+abline(h = 0.5, lty = 2)
+for(i in 1:length(Fig2order.sc)){
+  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(SC$prop.inv.cov[SC$plotting == Fig2paired[i]])),
-         y = SC$prop.inv.cov[SC$plotting == Fig2paired[i]],
+  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(SC$prop.inv.cov[SC$plotting == Fig2order[i]]),
+  points(x = vec1.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$prop.inv.cov[SC$plotting == Fig2order[i]])-se(SC$prop.inv.cov[SC$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(SC$prop.inv.cov[SC$plotting == Fig2order[i]])+se(SC$prop.inv.cov[SC$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(SC$prop.inv.cov[SC$plotting == Fig2paired[i]]),
+  points(x = vec2.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(SC$prop.inv.cov[SC$plotting == Fig2paired[i]])-se(SC$prop.inv.cov[SC$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(SC$prop.inv.cov[SC$plotting == Fig2paired[i]])+se(SC$prop.inv.cov[SC$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
-
-Fig2order <- c("UCON","LCON","MCON","HCON")
-vec1 <- c(0.9,1.9,2.9,3.9)
-Fig2paired <- c("UFR","LFR","MFR","HFR")
-vec2 <- c(1.1,2.1,3.1,4.1)
 
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
@@ -1377,38 +1453,117 @@ plot(x = c(0.5:4.5),
      xlab = "") ## disturbance history
 abline(h = 0.5, lty = 2)
 axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-
-Quarry <- PlotCov[PlotCov$site == "quarry",]
-for(i in 1:length(Fig2order)){
-  points(x = rep(vec1[i], length(Quarry$prop.inv.cov[Quarry$plotting == Fig2order[i]])),
-         y = Quarry$prop.inv.cov[Quarry$plotting == Fig2order[i]],
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
          col = rgb(0,0,0, alpha = 0.5),
          pch = 19)
-  points(x = rep(vec2[i], length(Quarry$prop.inv.cov[Quarry$plotting == Fig2paired[i]])),
-         y = Quarry$prop.inv.cov[Quarry$plotting == Fig2paired[i]],
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
          col = rgb(1,0,0, alpha = 0.5),
          pch = 19)
   
-  points(x = vec1[i]+0.1,
-         y = mean(Quarry$prop.inv.cov[Quarry$plotting == Fig2order[i]]),
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
          col = rgb(0,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$prop.inv.cov[Quarry$plotting == Fig2order[i]])-se(Quarry$prop.inv.cov[Quarry$plotting == Fig2order[i]])), x0 = vec1[i]+0.1, 
-           y1 = (mean(Quarry$prop.inv.cov[Quarry$plotting == Fig2order[i]])+se(Quarry$prop.inv.cov[Quarry$plotting == Fig2order[i]])), x1 = vec1[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
            col = rgb(0,0,0),lwd = 1.5)
   
-  points(x = vec2[i]+0.1,
-         y = mean(Quarry$prop.inv.cov[Quarry$plotting == Fig2paired[i]]),
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
          col = rgb(1,0,0, alpha = 0.5),
          pch = 17)
-  segments(y0 = (mean(Quarry$prop.inv.cov[Quarry$plotting == Fig2paired[i]])-se(Quarry$prop.inv.cov[Quarry$plotting == Fig2paired[i]])), x0 = vec2[i]+0.1, 
-           y1 = (mean(Quarry$prop.inv.cov[Quarry$plotting == Fig2paired[i]])+se(Quarry$prop.inv.cov[Quarry$plotting == Fig2paired[i]])), x1 = vec2[i]+0.1, 
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
            col = rgb(1,0,0),lwd = 1.5)
   
 }
 
-rm(Quarry);rm(SC);rm(Fig2order);rm(Fig2paired);rm(i);rm(vec1);rm(vec2)
-rm(invasive);rm(native)
+## change the nutrients of interest based on the column name in soils df
+nut <- 'prop.ann'
+plot(x = c(0.5:2.5),
+     y = c(0.5:2.5),
+     ylim = c(0,1),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+abline(h = 0.5, lty = 2)
+axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.sc)){
+  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
+         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.sc[i]+0.1,
+         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
+           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,1),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+abline(h = 0.5, lty = 2)
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+
+rm(Quarry);rm(SC);rm(Fig2order.q);rm(Fig2paired.q);rm(Fig2order.sc);rm(Fig2paired.sc)
+rm(i);rm(vec1.sc);rm(vec2.sc);rm(vec1.q);rm(vec2.q)
+rm(nut)
 
 
 # #### Supplemental - cov ~ PO4 ####
