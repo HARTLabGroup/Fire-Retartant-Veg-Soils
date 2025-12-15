@@ -592,7 +592,7 @@ par(mfrow = c(2,2))
 nut <- "NH4"
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
+     ylim = c(0,max(Quarry[,nut])),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -630,7 +630,7 @@ for(i in 1:length(Fig2order.q)){
 nut <- "NO3"
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
+     ylim = c(0,max(Quarry[,nut])),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -669,7 +669,7 @@ for(i in 1:length(Fig2order.q)){
 nut <- "PO4"
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
+     ylim = c(0,max(Quarry[,nut])),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
