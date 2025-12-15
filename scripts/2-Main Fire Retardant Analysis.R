@@ -587,6 +587,124 @@ for(i in 1:length(Fig2order.q)){
   
 }
 
+#### Management Brief Soils Figure ####
+par(mfrow = c(2,2))
+nut <- "NH4"
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,max(soils[,nut])),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+nut <- "NO3"
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,max(soils[,nut])),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+
+nut <- "PO4"
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,max(soils[,nut])),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+
 #### Supplemental Soil Nutrient Figures ####
 ## pH
 ## change the nutrients of interest based on the column name in soils df
@@ -1522,6 +1640,125 @@ for(i in 1:length(Fig2order.sc)){
   
 }
 
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,1),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+abline(h = 0.5, lty = 2)
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+
+#### Management Brief Cover Figure ####
+par(mfrow = c(2,2))
+nut <- "plot.cov"
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,max(Quarry$plot.cov)),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+nut <- "prop.inv"
+plot(x = c(0.5:4.5),
+     y = c(0.5:4.5),
+     ylim = c(0,1),
+     las = 1,
+     cex.axis = 1.5,
+     ylab = "", ## density
+     type = "n",
+     xaxt = "n",
+     xlab = "") ## disturbance history
+abline(h = 0.5, lty = 2)
+axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
+for(i in 1:length(Fig2order.q)){
+  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 19)
+  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
+         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 19)
+  
+  points(x = vec1.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
+         col = rgb(0,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
+           col = rgb(0,0,0),lwd = 1.5)
+  
+  points(x = vec2.q[i]+0.1,
+         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
+         col = rgb(1,0,0, alpha = 0.5),
+         pch = 17)
+  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
+           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
+           col = rgb(1,0,0),lwd = 1.5)
+  
+}
+nut <- "prop.ann"
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
      ylim = c(0,1),
