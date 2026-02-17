@@ -712,7 +712,7 @@ par(mfrow = c(1,2))
 nut <- 'pH'
 plot(x = c(0.5:4.5),
      y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
+     ylim = c(5,9),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -751,7 +751,7 @@ for(i in 1:length(Fig2order.q)){
 
 plot(x = c(0.5:2.5),
      y = c(0.5:2.5),
-     ylim = c(0,max(soils[,nut])),
+     ylim = c(5,9),
      las = 1,
      cex.axis = 1.5,
      ylab = "", ## density
@@ -1934,3 +1934,93 @@ plot(vectors, col = "black")
 rm(i);rm(ord.nmds.stress.q);rm(pal);rm(pal2);rm(se);rm(vectors);rm(Quarry)
 rm(SC);rm(env.q);rm(env.sc);rm(NMDSord.q)
 rm(NMDSord.sc);rm(ord.nmds.stress.sc);rm(mod);rm(preds);rm(newdata)
+
+
+#### Supplemental Table Species Frequencies ####
+summary.table(comm.sum.long)
+table(comm.sum.long$plot)
+sc.summ <- comm.sum.long[grep("SC",comm.sum.long$plot),]
+table(sc.summ$plot)
+sc.summ$plot <- substr(sc.summ$plot,1,3)
+sc.summ$plotavg <- ifelse(sc.summ$plotavg >0,1,0)
+sc.summ.agg <- aggregate(plotavg ~ code + plot, data = sc.summ, FUN = sum)
+table(sc.summ.agg$plot)
+
+`%notin%` <- purrr::negate(`%in%`)
+row_select <- 1:nrow(comm.sum.long)
+row_select %notin% grep("SC",comm.sum.long$plot)
+q.summ <- comm.sum.long[row_select %notin% grep("SC",comm.sum.long$plot),]
+table(q.summ$plot)
+q.summ$plot <- substr(q.summ$plot,1,2)
+q.summ$plotavg <- ifelse(q.summ$plotavg >0,1,0)
+q.summ.agg <- aggregate(plotavg ~ code + plot, data = q.summ, FUN = sum)
+table(q.summ.agg$plot)
+
+q.summ.agg <- q.summ.agg[order(q.summ.agg$plot, q.summ.agg$plotavg, decreasing = TRUE),]
+sc.summ.agg<- sc.summ.agg[order(sc.summ.agg$plot, sc.summ.agg$plotavg, decreasing = TRUE),]
+
+codes <- c(q.summ.agg$code[q.summ.agg$plot == "HC"][1:10],
+           q.summ.agg$code[q.summ.agg$plot == "HF"][1:10],
+           q.summ.agg$code[q.summ.agg$plot == "LC"][1:10],
+           q.summ.agg$code[q.summ.agg$plot == "LF"][1:10],
+           q.summ.agg$code[q.summ.agg$plot == "MC"][1:10],
+           q.summ.agg$code[q.summ.agg$plot == "MF"][1:10],
+           q.summ.agg$code[q.summ.agg$plot == "UC"][1:10],
+           q.summ.agg$code[q.summ.agg$plot == "UF"][1:10],
+           sc.summ.agg$code[sc.summ.agg$plot == "SCC"][1:10],
+           sc.summ.agg$code[sc.summ.agg$plot == "SCB"][1:10],
+           sc.summ.agg$code[sc.summ.agg$plot == "SCF"][1:10])
+length(unique(codes)) ## 47 species are the top 10 across all plots
+
+freqs <- c(q.summ.agg$plotavg[q.summ.agg$plot == "HC"][1:10],
+           q.summ.agg$plotavg[q.summ.agg$plot == "HF"][1:10],
+           q.summ.agg$plotavg[q.summ.agg$plot == "LC"][1:10],
+           q.summ.agg$plotavg[q.summ.agg$plot == "LF"][1:10],
+           q.summ.agg$plotavg[q.summ.agg$plot == "MC"][1:10],
+           q.summ.agg$plotavg[q.summ.agg$plot == "MF"][1:10],
+           q.summ.agg$plotavg[q.summ.agg$plot == "UC"][1:10],
+           q.summ.agg$plotavg[q.summ.agg$plot == "UF"][1:10],
+           sc.summ.agg$plotavg[sc.summ.agg$plot == "SCC"][1:10],
+           sc.summ.agg$plotavg[sc.summ.agg$plot == "SCB"][1:10],
+           sc.summ.agg$plotavg[sc.summ.agg$plot == "SCF"][1:10])
+
+sites <- c(rep("Quarry", 80), rep("SC",30))
+trt <- c(rep("High Control",10),
+         rep("High Treated",10),
+         rep("Low Control",10),
+         rep("Low Treated",10),
+         rep("Mod Control",10),
+         rep("Mod Treated",10),
+         rep("Unburn Control",10),
+         rep("Unburn Treated",10),
+         rep("Burned",10),
+         rep("Control",10),
+         rep("Treated",10))
+
+summ.table.df <- data.frame(site = sites,
+                            trt = trt,
+                            species = codes,
+                            freq = freqs,
+                            duration = NA,
+                            status = NA,
+                            FG = NA)
+summ.table.df <- summ.table.df[order(summ.table.df$site,summ.table.df$trt,summ.table.df$freq, decreasing = TRUE),]
+summ.table.df$duration <- sp.info$duration[match(summ.table.df$species, sp.info$code)]
+summ.table.df$status <- sp.info$status[match(summ.table.df$species, sp.info$code)]
+summ.table.df$FG <- sp.info$functional.group[match(summ.table.df$species, sp.info$code)]
+
+summ.table.sp <- aggregate(freq ~ species, summ.table.df, sum)
+summ.table.sp$sites <- NA
+summ.table.sp$trs <- NA
+
+for(i in 1:nrow(summ.table.sp)){
+  summ.table.sp$sites[i] <- paste(unique(summ.table.df$site[summ.table.df$species == summ.table.sp$species[i]]), collapse = ", ")
+  summ.table.sp$trs[i] <- paste(unique(summ.table.df$trt[summ.table.df$species == summ.table.sp$species[i]]), collapse = ", ")
+  
+}
+
+summ.table.sp <- summ.table.sp[order(summ.table.sp$freq, decreasing = TRUE),]
+summ.table.sp$duration <- sp.info$duration[match(summ.table.sp$species, sp.info$code)]
+summ.table.sp$status <- sp.info$status[match(summ.table.sp$species, sp.info$code)]
+summ.table.sp$FG <- sp.info$functional.group[match(summ.table.sp$species, sp.info$code)]
+# write.csv(summ.table.sp, "C:/Users/trevo/Dropbox/My PC (LAPTOP-GI7LHD15)/Documents/Carter/Research/Papers/In Progress/Fire Retardant Veg and Soils/Figures/SpeciesSummaryTable.csv")
