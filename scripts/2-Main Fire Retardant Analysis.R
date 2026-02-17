@@ -1985,17 +1985,17 @@ freqs <- c(q.summ.agg$plotavg[q.summ.agg$plot == "HC"][1:10],
            sc.summ.agg$plotavg[sc.summ.agg$plot == "SCF"][1:10])
 
 sites <- c(rep("Quarry", 80), rep("SC",30))
-trt <- c(rep("High Control",10),
-         rep("High Treated",10),
-         rep("Low Control",10),
-         rep("Low Treated",10),
-         rep("Mod Control",10),
-         rep("Mod Treated",10),
-         rep("Unburn Control",10),
-         rep("Unburn Treated",10),
-         rep("Burned",10),
-         rep("Control",10),
-         rep("Treated",10))
+trt <- c(rep("HC",10),
+         rep("HFR",10),
+         rep("LC",10),
+         rep("LFR",10),
+         rep("MC",10),
+         rep("MFR",10),
+         rep("UC",10),
+         rep("UFR",10),
+         rep("SCB",10),
+         rep("SCU",10),
+         rep("SCFR",10))
 
 summ.table.df <- data.frame(site = sites,
                             trt = trt,
@@ -2023,4 +2023,5 @@ summ.table.sp <- summ.table.sp[order(summ.table.sp$freq, decreasing = TRUE),]
 summ.table.sp$duration <- sp.info$duration[match(summ.table.sp$species, sp.info$code)]
 summ.table.sp$status <- sp.info$status[match(summ.table.sp$species, sp.info$code)]
 summ.table.sp$FG <- sp.info$functional.group[match(summ.table.sp$species, sp.info$code)]
-# write.csv(summ.table.sp, "C:/Users/trevo/Dropbox/My PC (LAPTOP-GI7LHD15)/Documents/Carter/Research/Papers/In Progress/Fire Retardant Veg and Soils/Figures/SpeciesSummaryTable.csv")
+summ.table.sp$name <- sp.info$species[match(summ.table.sp$species, sp.info$code)]
+ # write.csv(summ.table.sp, "C:/Users/trevo/Dropbox/My PC (LAPTOP-GI7LHD15)/Documents/Carter/Research/Papers/In Progress/Fire Retardant Veg and Soils/Figures/SpeciesSummaryTable.csv")
