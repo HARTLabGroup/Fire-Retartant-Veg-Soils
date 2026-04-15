@@ -2,9 +2,8 @@
 
 ## Description of the project
 
-This repository contains all code and data for *Drought may initiate western
-spruce budworm outbreaks, but multi-year periods of increased moisture
-availability promote widespread defoliation*.
+This repository contains all code and data for *Fire-Retardant Increases Soil N and P with Variable Effects on Vegetation One Year After Fire*
+which investigates the effecs of fire-retardant ammendments at two wildfires in the Front Range of Colorado.
 
 ## Organization of the project
 
