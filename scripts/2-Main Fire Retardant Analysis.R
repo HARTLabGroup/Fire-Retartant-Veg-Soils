@@ -1,18 +1,52 @@
-#### Begin - Loading Dependencies, Set Working Directory ####
+#### SET UP #####
+##### Import Libraries #####
 library(dplyr) ## useful for transforming data
 library(stringr) ## needed to find patterns in character strings
-library(lme4) ## glmm package
 library(vegan) ## multidimentional vegetation analysis package
-setwd("C:/Users/trevo/Dropbox/My PC (LAPTOP-GI7LHD15)/Documents/GitHub/Fire-Retartand-Veg-Soils") ## set working directory to the main GitHub folder
+library(piecewiseSEM) # for structural equation modeling
+library(semEffect) ## get direct and indirect effects from piecewise SEM
+library(MASS) # for negative binomial glm
+library(modelbased) 
+library(patchwork) # for combining ggplots
+library(here) # for file management
+library(ggplot2) # for plotting
+library(magrittr) # for the pipe operator
+library(tidyverse) # for data manipulation and visualization
+library(car) # for vi function to check for multicollinearity
+library(finalfit) #round tidy
 
-#### Reading in Data ####
+##### Set up project structure #####
+setwd(here()) ## set working directory 
+dir.create(here("output")) ## create an output folder for figures and tables)
+
+##### Set ggplot2 custom plotting theme
+theme_new <- function(base_size = 9,base_family = "helvetica"){
+  theme_classic(base_size = base_size, base_family = base_family) %+replace%
+    theme(
+      axis.line.x = element_line(color="black", linewidth = 0.25),
+      axis.line.y = element_line(color="black", linewidth = 0.25),
+      axis.title = element_text(size = 9),
+      axis.text = element_text(colour="black", size=8),
+      legend.key=element_rect(colour=NA, fill =NA),
+      panel.grid = element_blank(),   
+      plot.background = element_rect(fill = NA, colour = NA),
+      panel.border = element_rect(fill = NA, colour = NA),
+      panel.background = element_rect(fill = "white", colour = "black"), 
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(size = 9)
+    )
+}
+theme_set(theme_new())
+
+#### DATA IMPORT, CLEANING, AND SUMMARIZATION #####
+##### Reading in Data #####
 cover <- read.csv("./data/FieldData(comm).csv") ## field data on plant cover
 rich <- read.csv("./data/FieldData(rich).csv") ## field data on species richness
 env <- read.csv("./data/ENV_Data.csv") ## environmental data from script 1-Clean Environmental Data.R
 sp.info <- read.csv("./data/IntroducedStatusKey.csv") ## species information on introduced/native, functional group, etc. 
 soils <- read.csv("./data/CarterFR_analysis.csv")
 
-#### cleaning data ####
+##### Cleaning Data #####
 ## matching the plot names, a bit of inconsistency
 cover$plot <- gsub("_", "", cover$plot)
 rich$plot <- gsub("_", "", rich$plot)
@@ -84,8 +118,8 @@ rich <- rich[rich$code != "GILCUD",] ## no clue, removing for now
 unique(rich$code[rich$code %notin% sp.info$code])
 length(unique(rich$code)) ## 233 species
 
-#### Average Species Cover per Plot ####
-table(cover$plot) ## looking at plots and double checkking
+##### Calculate Average Species Cover per Plot #####
+table(cover$plot) ## looking at plots and double checking
 length(unique(cover$plot)) ## No plots missing
 table(rich$plot)
 length(unique(rich$plot)) ## No plots missing
@@ -116,7 +150,7 @@ str(cover.sum)
 cover.sum <- as.data.frame(cover.sum)
 length(unique(cover.sum$plot)) ## 108 plots (this is correct)
 
-#### Creating Community Data (Cover Estimates + Rare Species only found as richness) ####
+##### Creating Community Data (Cover Estimates + Rare Species only found as richness) #####
 rich
 rich <- rbind(rich[,c(1,2)], cover[,c(1,4)]) ## adding the rich and cover data together, just to make sure we didn't miss any species in any plot
 rich <- rich[order(rich$plot, rich$code),] ## ordering the dataframe
@@ -158,7 +192,9 @@ SpeciesFreq$Species <- rownames(SpeciesFreq)
 
 rm(tmp);rm(i);rm(vec);rm(plot.avg);rm(trans.avg)
 
-### Should sites be split in analysis? ####
+
+#### INITIAL EXPLORATION OF THE DATA #####
+##### Should sites be split in analysis? ######
 ## PERMANOVA 
 comm.sum[comm.sum == 0] <- 0.0001
 comm.sum[is.na(comm.sum)] <- 0
@@ -194,17 +230,18 @@ permutest(dispersion.comm, permutations = 999)
 permutest(dispersion.soil, permutations = 999)
 
 # Visualize dispersions
-par(mfrow = c(1,2))
-plot(dispersion.comm) ## sites are very different
-plot(dispersion.soil) ## sites are very different
+jpeg(here("output/DispersionPlots.jpeg"), width = 700, height = 400)
+par(mfrow = c(1,2),cex=1.2)
+plot(dispersion.comm, col=c("#018571","#a6611a"), main="plant community") ## sites are very different
+plot(dispersion.soil, col=c("#018571","#a6611a"), main="soils") ## sites are very different
+dev.off()
 
 rm(PERMANOVA.comm);rm(dist_matrix.comm);rm(dispersion.comm)
 rm(PERMANOVA.soil);rm(dist_matrix.soil);rm(dispersion.soil)
 rm(comm.dat);rm(soils.dat);rm(trt);rm(sev);rm(sites)
 
-#### Question 1 ####
-## SOILS Data question
-## How does fire retardant application influence soil nitrogen and 
+
+# How does fire retardant application influence soil nitrogen and 
 ## phosphorous compared to unamended burned and unburned areas?
 
 ## preliminary visualizations
@@ -229,1631 +266,1227 @@ plot(soils$PO4, col = as.factor(soils$Treatment), pch = 16)
 plot(soils$PO4, col = as.factor(soils$Burn.Severity), pch = 16)
 ## looks like heavily related to trt
 
-## splitting into two different groups
-quarry.soils <- soils[soils$Location == "Quarry",]
-quarry.soils$Burn.Severity <- factor(quarry.soils$Burn.Severity, levels = c("Unburned", "Low", "Moderate", "High"))
-quarry.soils$Treatment <- as.factor(quarry.soils$Treatment)
 
-sc.soils <- soils[soils$Location == "Stone Canyon",]
-sc.soils$Burn.Severity[sc.soils$Burn.Severity == "Fire  Line"] <- "Burned"
-sc.soils$Burn.Severity <- factor(sc.soils$Burn.Severity, levels = c("Unburned", "Burned"))
-sc.soils$Treatment <- as.factor(sc.soils$Treatment)
+#### ANALYSES ####
+##### Combine data ####
+dat.cover <- comm.sum.long %>% 
+  left_join(., sp.info, by = c("code" = "code")) %>% 
+  group_by(plot) %>% 
+  summarize(plot.cov = sum(plotavg, na.rm=T),
+            invasive.cov = sum(plotavg[status == "I"], na.rm=T),
+            annual.cov = sum(plotavg[duration== "annual"], na.rm=T)) %>% 
+  mutate(prop.inv.cov = invasive.cov/plot.cov,
+         prop.ann.cov = annual.cov/plot.cov)
 
-## Linear Models
+dat.rich <- comm.sum.long %>% 
+  left_join(., sp.info, by = c("code" = "code")) %>% 
+  group_by(plot) %>% 
+  summarize(plot.rich = n(),
+            plot.notCarex = sum(code != "CAREX SP.", na.rm=T),
+            invasive.rich = sum(status=="I", na.rm=T), 
+            annual.rich = sum(duration=="annual", na.rm=T)) %>%
+  mutate(prop.inv.sp = invasive.rich/plot.notCarex,
+         prop.ann.sp = annual.rich/plot.notCarex) %>% 
+  dplyr::select(-plot.notCarex)
+
+dat <- env[,c("plot", "site", "sev", "trt")] %>% 
+  full_join(., soils[,c(1,5:16)], by = c("plot" = "Field.ID")) %>% 
+  full_join(., dat.cover, by = "plot") %>% 
+  full_join(., dat.rich, by = "plot") %>% 
+  filter(!is.na(NH4)) %>% 
+  # change treatment to binary and burn severity to numeric
+  mutate(Treatment=ifelse(trt=="con", 0, 1), 
+         Burn.Severity=as.numeric(factor(sev, levels=c("unburn", "low", "mod", "high"), ordered=T)))
+
+##### QUARRY #####
+q.dat <- dat %>% 
+  filter(site=="quarry") 
+rownames(q.dat) <- 1:nrow(q.dat) # this needs to be run in order for the standardized coefficients to be calculated
+
+###### Soils ######
 ## NH4
-NH4.mod.q <- lm(NH4 ~ Burn.Severity*Treatment, data = quarry.soils)
+NH4.mod.q <- lm(NH4 ~ Burn.Severity*Treatment, data = q.dat)
 summary(NH4.mod.q)
 plot(residuals(NH4.mod.q))
 qqnorm(residuals(NH4.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
 qqline(residuals(NH4.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
 
-NH4.mod.sc <- lm(NH4 ~ Burn.Severity*Treatment, data = sc.soils)
-summary(NH4.mod.sc)
-plot(residuals(NH4.mod.sc))
-qqnorm(residuals(NH4.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
-qqline(residuals(NH4.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
-rm(NH4.mod.q);rm(NH4.mod.sc)
-
 ## NO3
-NO3.mod.q <- lm(NO3 ~ Burn.Severity*Treatment, data = quarry.soils)
+NO3.mod.q <- lm(NO3 ~ Burn.Severity*Treatment, data =  q.dat)
 summary(NO3.mod.q)
 plot(residuals(NO3.mod.q))
 qqnorm(residuals(NO3.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
 qqline(residuals(NO3.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
 
-NO3.mod.sc <- lm(NO3 ~ Burn.Severity*Treatment, data = sc.soils)
-summary(NO3.mod.sc)
-plot(residuals(NO3.mod.sc))
-qqnorm(residuals(NO3.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
-qqline(residuals(NO3.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
-rm(NO3.mod.q);rm(NO3.mod.sc)
-
 ## PO4
-P.mod.q <- lm(PO4 ~ Burn.Severity*Treatment, data = quarry.soils)
+P.mod.q <- lm(PO4 ~ Burn.Severity*Treatment, data =  q.dat)
 summary(P.mod.q)
 plot(residuals(P.mod.q))
 qqnorm(residuals(P.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
 qqline(residuals(P.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
 
-P.mod.sc <- lm(PO4 ~ Burn.Severity*Treatment, data = sc.soils)
+###### COVER ######
+## Total
+cov.mod.q  <- lm(plot.cov ~  NO3 + NH4 + PO4 + Burn.Severity + Treatment, data = q.dat)
+summary(cov.mod.q)
+vif(cov.mod.q)
+plot(residuals(cov.mod.q))
+qqnorm(residuals(cov.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(cov.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## Proportion invasive 
+icov.mod.q  <- lm(prop.inv.cov  ~  NO3 + NH4 + PO4 + Burn.Severity + Treatment, data = q.dat)
+summary(icov.mod.q )
+plot(residuals(icov.mod.q ))
+qqnorm(residuals(icov.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(icov.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## Proportion annual
+acov.mod.q  <- lm(prop.ann.cov ~  NO3 + NH4 + PO4 + Burn.Severity + Treatment, data = q.dat)
+summary(acov.mod.q )
+plot(residuals(acov.mod.q ))
+qqnorm(residuals(acov.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(acov.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
+
+###### RICHNESS #####
+## Total richness
+rich.mod.q <- glm.nb(plot.rich ~  NO3 + NH4 + PO4 +  Burn.Severity + Treatment, data = q.dat) # mean(dat$plot.rich) = 20; var(dat$plot.rich) = 54 
+summary(rich.mod.q)
+plot(residuals(rich.mod.q ))
+qqnorm(residuals(rich.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(rich.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## Proportion invasive richnes
+irich.mod.q <- lm(prop.inv.sp~  NO3 + NH4 + PO4 + Burn.Severity + Treatment, data = q.dat) 
+summary(irich.mod.q)
+plot(residuals(irich.mod.q ))
+qqnorm(residuals(irich.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(irich.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## Proportion annual richness
+arich.mod.q <- lm(prop.ann.sp~  NO3 + NH4 + PO4 + Burn.Severity + Treatment, data = q.dat) 
+summary(arich.mod.q)
+plot(residuals(arich.mod.q ))
+qqnorm(residuals(arich.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(arich.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
+
+###### PIECEWISE SEM BY PLANT RESPONSE #####
+## total cover
+modList.plot.cov <- psem(NH4.mod.q, NO3.mod.q, P.mod.q, cov.mod.q, data =q.dat)
+summary(modList.plot.cov)
+coef.summary <- summary(modList.plot.cov)$coefficients
+di.effect <- get_effect(modList.plot.cov, target="plot.cov")$effect_long %>% mutate(Response="total cover", site="Quarry")
+r2.summary <- summary(modList.plot.cov)$R2 %>% mutate(site="Quarry") 
+Cstat.summary <- summary(modList.plot.cov)$Cstat  %>% mutate(Response="total cover", site="Quarry")
+
+## invasive cover
+modList.plot.icov <- psem(NH4.mod.q, NO3.mod.q, P.mod.q, icov.mod.q, data =q.dat)
+summary(modList.plot.icov)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.icov)$coefficients) 
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.icov, target="prop.inv.cov")$effect_long %>% mutate(Response="prop.invasive cover", site="Quarry"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.icov)$R2 %>% mutate(site="Quarry")) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.icov)$Cstat  %>% mutate(Response="prop. invasive cover", site="Quarry"))
+
+## annual cover
+modList.plot.acov <- psem(NH4.mod.q, NO3.mod.q, P.mod.q, acov.mod.q, data =q.dat)
+summary(modList.plot.acov)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.acov)$coefficients) 
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.acov, target="prop.ann.cov")$effect_long %>% mutate(Response="prop. annual cover", site="Quarry"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.acov)$R2 %>% mutate(site="Quarry") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.acov)$Cstat  %>% mutate(Response="prop. annual cover", site="Quarry"))
+
+## total richness
+modList.plot.rich <- psem(NH4.mod.q, NO3.mod.q, P.mod.q, rich.mod.q, data =q.dat)
+summary(modList.plot.rich)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.rich)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.rich, target="plot.rich")$effect_long %>% mutate(Response="species richness", site="Quarry"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.rich)$R2 %>% mutate(site="Quarry") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.rich)$Cstat  %>% mutate(Response="species richness", site="Quarry"))
+
+## annual rich
+modList.plot.arich <- psem(NH4.mod.q, NO3.mod.q, P.mod.q, arich.mod.q, data =q.dat)
+summary(modList.plot.arich)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.arich)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.arich, target="prop.ann.sp")$effect_long %>% mutate(Response="prop. annual richness", site="Quarry"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.arich)$R2 %>% mutate(site="Quarry") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.arich)$Cstat  %>% mutate(Response="prop. annual richness", site="Quarry"))
+
+## invasive rich
+modList.plot.irich <- psem(NH4.mod.q, NO3.mod.q, P.mod.q, irich.mod.q, data =q.dat)
+summary(modList.plot.irich)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.irich)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.irich, target="prop.inv.sp")$effect_long %>% mutate(Response="prop. invasive richness", site="Quarry"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.irich)$R2 %>% mutate(site="Quarry") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.irich)$Cstat  %>% mutate(Response="prop. invasive richness", site="Quarry"))
+
+coef.summary.quarry <- coef.summary %>% unique() %>% mutate(site="Quarry")
+
+##### STONE CANYON ######
+sc.dat <- dat %>% 
+  filter(site=="sc") 
+rownames(sc.dat) <- 1:nrow(sc.dat) # this needs to be run in order for the standardized coefficients to be calculated
+
+###### Soils ######
+## NH4
+NH4.mod.sc <- lm(NH4 ~ Burn.Severity+Treatment, data = sc.dat)
+summary(NH4.mod.sc)
+plot(residuals(NH4.mod.sc))
+qqnorm(residuals(NH4.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(NH4.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## NO3
+NO3.mod.sc <- lm(NO3 ~ Burn.Severity+Treatment, data =  sc.dat)
+summary(NO3.mod.sc)
+plot(residuals(NO3.mod.sc))
+qqnorm(residuals(NO3.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(NO3.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## PO4
+P.mod.sc <- lm(PO4 ~ Burn.Severity+Treatment, data =  sc.dat)
 summary(P.mod.sc)
 plot(residuals(P.mod.sc))
 qqnorm(residuals(P.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
 qqline(residuals(P.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
-rm(P.mod.q);rm(P.mod.sc)
 
-## supplemental analysis of additional nutrients
-colnames(soils[c(5:16)])
+###### COVER ######
+## Tot
+cov.mod.sc  <- lm(plot.cov ~  NO3 + NH4 +  Burn.Severity + Treatment, data = sc.dat) 
+summary(cov.mod.sc)
+vif(cov.mod.sc)
+plot(residuals(cov.mod.sc))
+qqnorm(residuals(cov.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(cov.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
 
+## Proportion invasive 
+icov.mod.sc  <- lm(prop.inv.cov  ~  NO3 + NH4 + Burn.Severity + Treatment , data = sc.dat) 
+summary(icov.mod.sc )
+plot(residuals(icov.mod.sc ))
+qqnorm(residuals(icov.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(icov.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## Proportion annual
+acov.mod.sc  <- lm(prop.ann.cov  ~  NO3 + NH4  + Burn.Severity + Treatment, data = sc.dat)
+summary(acov.mod.sc )
+plot(residuals(acov.mod.sc ))
+qqnorm(residuals(acov.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(acov.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
+
+###### RICHNESS #####
+## Total richness
+rich.mod.sc <- glm.nb(plot.rich ~  NO3 + NH4 +  Burn.Severity  + Treatment, data = sc.dat) # mean(dat$plot.rich) = 20; var(dat$plot.rich) = 54 
+summary(rich.mod.sc)
+plot(residuals(rich.mod.sc ))
+qqnorm(residuals(rich.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(rich.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## Proportion invasive richnes
+irich.mod.sc <- lm(prop.inv.sp~  NO3 + NH4  + Burn.Severity + Treatment, data = sc.dat) 
+summary(irich.mod.sc)
+plot(residuals(irich.mod.sc ))
+qqnorm(residuals(irich.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(irich.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
+
+## Proportion annual richness
+arich.mod.sc <- lm(prop.ann.sp~  NO3 + NH4  + Burn.Severity  + Treatment, data = sc.dat) 
+summary(arich.mod.sc)
+plot(residuals(arich.mod.sc ))
+qqnorm(residuals(arich.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(arich.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
+
+###### PIECEWISE SEM BY PLANT RESPONSE #####
+## total cover
+modList.plot.cov <- psem(NH4.mod.sc, NO3.mod.sc, P.mod.sc, cov.mod.sc, PO4 %~~% NO3, data =sc.dat)
+summary(modList.plot.cov)
+coef.summary <- summary(modList.plot.cov)$coefficients
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.cov, target="plot.cov")$effect_long %>% mutate(Response="total cover", site="Stone Canyon"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.cov)$R2 %>% mutate(site="Stone Canyon"))
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.cov)$Cstat  %>% mutate(Response="total cover", site="Stone Canyon"))
+
+## invasive cover
+modList.plot.icov <- psem(NH4.mod.sc, NO3.mod.sc, P.mod.sc, icov.mod.sc, PO4 %~~% NO3, data =sc.dat)
+summary(modList.plot.icov)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.icov)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.icov, target="prop.inv.cov")$effect_long %>% mutate(Response="prop.invasive cover", site="Stone Canyon"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.icov)$R2 %>% mutate(site="Stone Canyon")) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.icov)$Cstat  %>% mutate(Response="prop. invasive cover", site="Stone Canyon"))
+
+## annual cover
+modList.plot.acov <- psem(NH4.mod.sc, NO3.mod.sc, P.mod.sc, acov.mod.sc, PO4 %~~% NO3, data =sc.dat)
+summary(modList.plot.acov)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.acov)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.acov, target="prop.ann.cov")$effect_long %>% mutate(Response="prop. annual cover", site="Stone Canyon"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.acov)$R2 %>% mutate(site="Stone Canyon") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.acov)$Cstat  %>% mutate(Response="prop. annual cover", site="Stone Canyon"))
+
+## total richness
+modList.plot.rich <- psem(NH4.mod.sc, NO3.mod.sc, P.mod.sc, rich.mod.sc, PO4 %~~% NO3, data =sc.dat)
+summary(modList.plot.rich)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.rich)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.rich, target="plot.rich")$effect_long %>% mutate(Response="species richness", site="Stone Canyon"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.rich)$R2 %>% mutate(site="Stone Canyon") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.rich)$Cstat  %>% mutate(Response="species richness", site="Stone Canyon"))
+
+## annual rich
+modList.plot.arich <- psem(NH4.mod.sc, NO3.mod.sc, P.mod.sc, arich.mod.sc, PO4 %~~% NO3, data =sc.dat)
+summary(modList.plot.arich)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.arich)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.arich, target="prop.ann.sp")$effect_long %>% mutate(Response="prop. annual richness", site="Stone Canyon"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.arich)$R2 %>% mutate(site="Stone Canyon") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.arich)$Cstat  %>% mutate(Response="prop. annual richness", site="Stone Canyon"))
+
+## invasive rich
+modList.plot.irich <- psem(NH4.mod.sc, NO3.mod.sc, P.mod.sc, irich.mod.sc, PO4 %~~% NO3, data =sc.dat)
+summary(modList.plot.irich)
+coef.summary <- bind_rows(coef.summary, summary(modList.plot.irich)$coefficients)
+di.effect <- bind_rows(di.effect, get_effect(modList.plot.irich, target="prop.inv.sp")$effect_long %>% mutate(Response="prop. invasive richness", site="Stone Canyon"))
+r2.summary <- bind_rows(r2.summary, summary(modList.plot.irich)$R2 %>% mutate(site="Stone Canyon") ) %>% unique()
+Cstat.summary <- bind_rows(Cstat.summary, summary(modList.plot.irich)$Cstat  %>% mutate(Response="prop. invasive richness", site="Stone Canyon"))
+coef.summary.sc <- coef.summary %>% unique() %>% mutate(site="Stone Canyon")
+
+##### TABLES ####
+coef.summary <- coef.summary.sc %>% 
+  filter(!Response=="~~PO4") %>% 
+  mutate(Std.Error=as.numeric(Std.Error )) %>% 
+  bind_rows(., coef.summary.quarry) %>%
+  set_colnames(c("Response", "Predictor", "Estimate", "Std.Error", "DF", "Crit.Value", "P.Value", "Std.Estimate", "Significance", "site")) %>% 
+  mutate(Estimate = round_tidy(Estimate,3),
+         Std.Error = round_tidy(Std.Error,3),
+         Std.Estimate = round_tidy(Std.Estimate,3)) %>% 
+  unite("Estimate", Estimate,  Std.Error, sep=" (") %>% 
+  mutate(Estimate=paste0(Estimate, ")")) %>%
+  dplyr::select(site, Response, Predictor, Estimate, Std.Estimate, Significance) %>% 
+  pivot_wider(names_from=Response, values_from=c(Estimate, Std.Estimate, Significance)) %>% 
+  dplyr::select(site, Predictor,
+                Estimate_NH4, Std.Estimate_NH4, Significance_NH4,
+                Estimate_NO3, Std.Estimate_NO3, Significance_NO3,
+                Estimate_PO4, Std.Estimate_PO4, Significance_PO4,
+                Estimate_plot.cov, Std.Estimate_plot.cov, Significance_plot.cov, 
+                Estimate_prop.inv.cov, Std.Estimate_prop.inv.cov, Significance_prop.inv.cov,
+                Estimate_prop.ann.cov, Std.Estimate_prop.ann.cov, Significance_prop.ann.cov,
+                Estimate_plot.rich, Std.Estimate_plot.rich, Significance_plot.rich,
+                Estimate_prop.inv.sp, Std.Estimate_prop.inv.sp, Significance_prop.inv.sp,
+                Estimate_prop.ann.sp, Std.Estimate_prop.ann.sp, Significance_prop.ann.sp) 
+coef.summary %>% 
+  arrange(site) %>% 
+  write.csv(here("output", "SEM-coefsummary.csv"), row.names=F)
+
+r2.summary %>% 
+  write.csv(here("output", "SEM-r2summary.csv"), row.names=F)
+
+##### Figure 3 #####
+p1 <- estimate_relation(NH4.mod.q, by=c("Burn.Severity", "Treatment")) %>% 
+  as.data.frame() %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>% 
+  mutate(Predicted=ifelse(Predicted<0, 0, Predicted)) %>% 
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=factor(Treatment), fill=factor(Treatment))) +
+    geom_line()+geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+    geom_point(data=q.dat, aes(x=Burn.Severity, y=NH4, col=factor(Treatment)), position=position_jitter(width=0.1), alpha=0.75) +
+    scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) +
+    scale_color_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    scale_fill_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) +
+    xlab("Burn Severity") +
+    ylab(expression(paste("soil NH"[4], " (mg/kg)"))) + 
+    theme(legend.position = "bottom", legend.title=element_blank())+ylim(0,max(dat$NH4)+0.05)
+
+
+p2 <- estimate_relation(NO3.mod.q, by=c("Burn.Severity", "Treatment")) %>% 
+  as.data.frame() %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>% 
+  mutate(Predicted=ifelse(Predicted<0, 0, Predicted)) %>% 
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=factor(Treatment), fill=factor(Treatment))) + 
+    geom_line() + 
+    geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=q.dat, aes(x=Burn.Severity, y=NO3, col=factor(Treatment)), position=position_jitter(width=0.1), alpha=0.75) + 
+    scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) + 
+    scale_color_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    scale_fill_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) +
+    xlab("Burn Severity") + 
+    ylab(expression(paste("soil NO"[3], " (mg/kg)"))) +
+    theme(legend.position = "bottom", legend.title=element_blank())
+
+p3 <- estimate_relation(P.mod.q, by=c("Burn.Severity", "Treatment")) %>% 
+  as.data.frame() %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>% 
+  mutate(Predicted=ifelse(Predicted<0, 0, Predicted)) %>% 
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=factor(Treatment), fill=factor(Treatment))) + 
+    geom_line() + 
+    geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=q.dat, aes(x=Burn.Severity, y=PO4, col=factor(Treatment)), position=position_jitter(width=0.1), alpha=0.75) +
+    scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) + 
+    scale_color_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    scale_fill_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    xlab("Burn Severity") + 
+    ylab(expression(paste("soil PO"[4], " (mg/kg)"))) + 
+    theme(plot.title = element_text(hjust = 0.5))+theme(legend.position = "bottom", legend.title=element_blank())
+
+p4 <- estimate_relation(NH4.mod.sc, by=c("Burn.Severity", "Treatment")) %>% 
+  as.data.frame() %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>% 
+  mutate(Predicted=ifelse(Predicted<0, 0, Predicted)) %>% 
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=factor(Treatment), fill=factor(Treatment))) + 
+    geom_line() + 
+    geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+    geom_point(data=sc.dat, aes(x=Burn.Severity, y=NH4, col=factor(Treatment)), position=position_jitter(width=0.1), alpha=0.75) + 
+    scale_x_continuous(breaks = c(1, 2), labels = c("unburned", "low")) + 
+    scale_color_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    scale_fill_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    xlab("Burn Severity") +
+    ylab(expression(paste("soil NH"[4], " (mg/kg)"))) + 
+    theme(legend.position = "bottom", legend.title=element_blank())+ylim(0,max(dat$NH4)+0.05)
+
+
+p5 <- estimate_relation(NO3.mod.sc, by=c("Burn.Severity", "Treatment")) %>% 
+  as.data.frame() %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>% 
+  mutate(Predicted=ifelse(Predicted<0, 0, Predicted)) %>% 
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=factor(Treatment), fill=factor(Treatment))) + 
+    geom_line() + 
+    geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+    geom_point(data=sc.dat, aes(x=Burn.Severity, y=NO3, col=factor(Treatment)), position=position_jitter(width=0.1), alpha=0.75) + 
+    scale_x_continuous(breaks = c(1, 2), labels = c("unburned", "low")) + 
+    scale_color_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    scale_fill_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    xlab("Burn Severity") +
+    ylab(expression(paste("soil NO"[3], " (mg/kg)"))) +
+    theme(plot.title = element_text(hjust = 0.5),legend.position = "bottom", legend.title=element_blank())
+
+p6 <- estimate_relation(P.mod.sc, by=c("Burn.Severity", "Treatment")) %>% 
+  as.data.frame() %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>% 
+  mutate(Predicted=ifelse(Predicted<0, 0, Predicted)) %>% 
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=factor(Treatment), fill=factor(Treatment))) + 
+    geom_line() + 
+    geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+    scale_x_continuous(breaks = c(1, 2), labels = c("unburned", "low")) + 
+    scale_color_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant")) + 
+    scale_fill_manual(values=c("gray25","darkred"), labels=c("control", "Fire retardant") )+ 
+    xlab("Burn Severity") + 
+    ylab(expression(paste("soil PO"[4], " (mg/kg)"))) + 
+    theme(plot.title = element_text(hjust = 0.5)) + 
+    geom_point(data=sc.dat, aes(x=Burn.Severity, y=PO4, col=factor(Treatment)), position=position_jitter(width=0.1), alpha=0.75) + 
+    theme(legend.position = "bottom", legend.title=element_blank())
+
+p123456 <- p1 +p2 +p3+p4 +p5 +p6+plot_layout(guides="collect",  nrow=3, byrow=F, widths=c(2,1), axis_titles="collect")+ plot_annotation(tag_levels = 'a') & theme(legend.position = "bottom", legend.title=element_blank())
+
+ggsave(p123456, filename=here("output", "fig3-soils.jpg"), width =3.5, height = 6, units = "in", dpi = 300)
+
+
+
+
+##### FIGURE 4 ####
+p1 <- bind_rows(estimate_relation(cov.mod.q, by="NH4") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(cov.mod.sc, by="NH4")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NH4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.cov),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("total cover (%)") + xlab(expression(paste("soil NH"[4], " (mg/g)"))) 
+
+p2 <- bind_rows(estimate_relation(cov.mod.q, by="NO3") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(cov.mod.sc, by="NO3")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NO3, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.cov),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("total cover (%)") + xlab(expression(paste("soil NO"[3], " (mg/g)"))) 
+
+p3 <- estimate_relation(cov.mod.q, by="PO4") %>% as.data.frame() %>% mutate(site="quarry") %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=PO4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.cov), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("total cover (%)") + xlab(expression(paste("soil PO"[4], " (mg/g)"))) 
+
+p4 <- bind_rows(estimate_relation(cov.mod.q, by="Burn.Severity") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(cov.mod.sc, by="Burn.Severity")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.cov), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("total cover (%)") + xlab("burn severity") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) 
+  
+p5 <- bind_rows(estimate_relation(cov.mod.q, by="Treatment") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(cov.mod.sc, by="Treatment")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Treatment, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.cov), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("total cover (%)") + xlab("fire retardant") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("control", "treated")) 
+
+### proportion non-native
+p6 <- bind_rows(estimate_relation(icov.mod.q, by="NH4") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(icov.mod.sc, by="NH4")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NH4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.cov),alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\ncover") + xlab(expression(paste("soil NH"[4], " (mg/g)"))) 
+
+p7 <- bind_rows(estimate_relation(icov.mod.q, by="NO3") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(icov.mod.sc, by="NO3")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NO3, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.cov), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\ncover") + xlab(expression(paste("soil NO"[3], " (mg/g)"))) 
+
+p8 <- estimate_relation(icov.mod.q, by="PO4") %>% as.data.frame() %>% mutate(site="quarry") %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=PO4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.cov), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\ncover") + xlab(expression(paste("soil PO"[4], " (mg/g)"))) 
+
+p9 <- bind_rows(estimate_relation(icov.mod.q, by="Burn.Severity") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(icov.mod.sc, by="Burn.Severity")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.cov), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\ncover") + xlab("burn severity") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) 
+
+p10<- bind_rows(estimate_relation(icov.mod.q, by="Treatment") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(icov.mod.sc, by="Treatment")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Treatment, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.cov), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\ncover") + xlab("fire retardant") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("control", "treated")) 
+
+### proportion annual 
+p11 <- bind_rows(estimate_relation(acov.mod.q, by="NH4") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(acov.mod.sc, by="NH4")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NH4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.cov), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\ncover") + xlab(expression(paste("soil NH"[4], " (mg/g)"))) 
+
+p12 <- bind_rows(estimate_relation(acov.mod.q, by="NO3") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(acov.mod.sc, by="NO3")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NO3, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.cov),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\ncover") + xlab(expression(paste("soil NO"[3], " (mg/g)"))) 
+
+p13 <- estimate_relation(acov.mod.q, by="PO4") %>% as.data.frame() %>% mutate(site="quarry") %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=PO4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.cov),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\ncover") + xlab(expression(paste("soil PO"[4], " (mg/g)"))) 
+
+p14 <- bind_rows(estimate_relation(acov.mod.q, by="Burn.Severity") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(acov.mod.sc, by="Burn.Severity")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.cov), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\ncover") + xlab("burn severity") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) 
+
+p15 <- bind_rows(estimate_relation(acov.mod.q, by="Treatment") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(acov.mod.sc, by="Treatment")  %>% as.data.frame()  %>% mutate(site="sc"))%>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Treatment, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.cov), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\ncover") + xlab("fire retardant") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("control", "treated")) 
+
+pcover <- p1 + p2 +p3 +p4 +p5 +p6 +p7 +p8 +p9 +p10 +p11 +p12 +p13 +p14 +p15 +plot_layout(guides="collect", nrow=5, byrow=F)+ plot_annotation(tag_levels = 'a') & theme(legend.position = "bottom", legend.title=element_blank()) 
+pcover %>% ggsave(filename=here("output", "fig4-cover.jpg"), width = 7, height = 8, units = "in", dpi = 300)
+
+##### FIGURE 5 ####
+p1 <- bind_rows(estimate_relation(rich.mod.q, by="NH4") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(rich.mod.sc, by="NH4")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NH4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.rich),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("species richness") + xlab(expression(paste("soil NH"[4], " (mg/g)"))) 
+
+p2 <- bind_rows(estimate_relation(rich.mod.q, by="NO3") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(rich.mod.sc, by="NO3")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NO3, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.rich),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("species richness") + xlab(expression(paste("soil NO"[3], " (mg/g)"))) 
+
+p3 <- estimate_relation(rich.mod.q, by="PO4") %>% as.data.frame() %>% mutate(site="quarry") %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=PO4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.rich), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("species richness") + xlab(expression(paste("soil PO"[4], " (mg/g)"))) 
+
+p4 <- bind_rows(estimate_relation(rich.mod.q, by="Burn.Severity") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(rich.mod.sc, by="Burn.Severity")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.rich), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("species richness") + xlab("burn severity") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) 
+
+p5 <- bind_rows(estimate_relation(rich.mod.q, by="Treatment") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(rich.mod.sc, by="Treatment")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Treatment, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=plot.rich), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("species richness") + xlab("fire retardant") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("control", "treated")) 
+
+### proportion non-native
+p6 <- bind_rows(estimate_relation(irich.mod.q, by="NH4") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(icov.mod.sc, by="NH4")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NH4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.sp),alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\nspecies") + xlab(expression(paste("soil NH"[4], " (mg/g)"))) 
+
+p7 <- bind_rows(estimate_relation(irich.mod.q, by="NO3") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(irich.mod.sc, by="NO3")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NO3, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.sp), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\nspecies") + xlab(expression(paste("soil NO"[3], " (mg/g)"))) 
+
+p8 <- estimate_relation(irich.mod.q, by="PO4") %>% as.data.frame() %>% mutate(site="quarry") %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=PO4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.sp), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\nspecies") + xlab(expression(paste("soil PO"[4], " (mg/g)"))) 
+
+p9 <- bind_rows(estimate_relation(irich.mod.q, by="Burn.Severity") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(irich.mod.sc, by="Burn.Severity")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.sp), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\nspecies") + xlab("burn severity") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) 
+
+p10<- bind_rows(estimate_relation(irich.mod.q, by="Treatment") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(irich.mod.sc, by="Treatment")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Treatment, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.inv.sp), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. non-native\nspecies") + xlab("fire retardant") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("control", "treated")) 
+
+### proportion annual 
+p11 <- bind_rows(estimate_relation(arich.mod.q, by="NH4") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(arich.mod.sc, by="NH4")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NH4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.sp), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\nspecies") + xlab(expression(paste("soil NH"[4], " (mg/g)"))) 
+
+p12 <- bind_rows(estimate_relation(arich.mod.q, by="NO3") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(arich.mod.sc, by="NO3")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=NO3, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.sp),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\nspecies") + xlab(expression(paste("soil NO"[3], " (mg/g)"))) 
+
+p13 <- estimate_relation(arich.mod.q, by="PO4") %>% as.data.frame() %>% mutate(site="quarry")%>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=PO4, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.sp),  alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\nspecies") + xlab(expression(paste("soil PO"[4], " (mg/g)"))) 
+
+p14 <- bind_rows(estimate_relation(arich.mod.q, by="Burn.Severity") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(arich.mod.sc, by="Burn.Severity")  %>% as.data.frame()  %>% mutate(site="sc")) %>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Burn.Severity, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.sp), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\nspecies") + xlab("burn severity") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) 
+
+p15 <- bind_rows(estimate_relation(arich.mod.q, by="Treatment") %>% as.data.frame() %>% mutate(site="quarry"), estimate_relation(arich.mod.sc, by="Treatment")  %>% as.data.frame()  %>% mutate(site="sc"))%>% 
+  mutate(CI_low=ifelse(CI_low<0, 0, CI_low)) %>%
+  ggplot(aes(x=Treatment, y=Predicted, col=site, fill=site)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin=CI_low, ymax=CI_high), alpha=0.25, color=NA) + 
+  geom_point(data=dat, aes(y=prop.ann.sp), position=position_jitter(width=0.1), alpha=0.75) + 
+  scale_color_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  scale_fill_manual(values=c("#018571", "#A6611A"), labels=c("Quarry", "Stone Canyon")) +
+  ylab("prop. annual\nspecies") + xlab("fire retardant") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("control", "treated")) 
+
+prichness <- p1 + p2 +p3 +p4 +p5 +p6 +p7 +p8 +p9 +p10 +p11 +p12 +p13 +p14 +p15 +plot_layout(guides="collect", nrow=5, byrow=F)+ plot_annotation(tag_levels = 'a') & theme(legend.position = "bottom", legend.title=element_blank()) 
+prichness %>% ggsave(filename=here("output", "fig5-richness.jpg"), width = 7, height = 8, units = "in", dpi = 300)
+
+##### SUPPLEMENTAL FIGURES #####
+###### FIGURE S2 - DIRECT AND INDIRECT EFFECTS #####
+ps2 <- di.effect %>% 
+  mutate(Variable=factor(Variable, levels=c("Burn.Severity", "Treatment", "Burn.Severity:Treatment", "NH4", "NO3", "PO4" ), labels=c("Burn severity", "Fire retardant", "Burn Severity:fire retardant", "soil NH4", "soil NO3", "soil PO4")),
+         Effect_Type=factor(Effect_Type, levels=c("Direct_Effect", "Indirect_Effect", "Total_Effect"), labels=c("Direct", "Indirect", "Total")),
+         Response=factor(Response, levels=c("total cover", "prop.invasive cover", "prop. annual cover", "species richness",  "prop. invasive richness","prop. annual richness"), labels=c("total cover", "prop. non-native cover", "prop. annual cover", "species richness", "prop. non-native species", "prop. annual species"), ordered=T)) %>%
+  ggplot(aes(x=Variable, y=Effect_Value, fill=Effect_Type)) + 
+  geom_bar(stat="identity", position=position_dodge()) +
+  facet_grid(Response~site, , labeller = label_wrap_gen(width = 16))  + 
+  xlab("") + ylab("standardized effect size") + 
+  theme(legend.position = "bottom", legend.title=element_blank())+coord_flip()
+
+ggsave(ps2, filename=here("output", "figS2-direct-indirect-effects.jpg"), width = 7, height = 7, units = "in", dpi = 300)
+
+
+
+###### FIGURE S5 - CORRELATION PLOT - QUARRY #####
+library(ggcorrplot)
+p1 <- q.dat[,c("NH4", "NO3", "PO4", "plot.cov", "prop.inv.cov", "prop.ann.cov", "plot.rich", "prop.inv.sp", "prop.ann.sp")] %>% 
+  set_colnames(c("NH4", "NO3", "PO4", "total cover", "prop. non-native cover", "prop. annual cover", "species richness", "prop. non-native species", "prop. annual species")) %>% 
+    cor( use="pairwise.complete.obs") %>%
+  ggcorrplot(method="square", type="lower", lab=T, lab_size=3) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + 
+  labs(title="Quarry")
+
+ggsave(p1, filename=here("output", "figS5-correlation-matrix-Quarry.jpg"), width = 5, height = 5, units = "in", dpi = 300)
+
+
+###### FIGURE S5 - CORRELATION PLOT - STONE CANYON #####
+p2 <- sc.dat[,c("NH4", "NO3", "PO4", "plot.cov", "prop.inv.cov", "prop.ann.cov", "plot.rich", "prop.inv.sp", "prop.ann.sp")] %>% 
+  set_colnames(c("NH4", "NO3", "PO4", "total cover", "prop. non-native cover", "prop. annual cover", "species richness", "prop. non-native species", "prop. annual species")) %>% 
+  cor( use="pairwise.complete.obs") %>%
+  ggcorrplot(method="square", type="lower", lab=T, lab_size=3) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + 
+  labs(title="Stone Canyon")
+ggsave(p2, filename=here("output", "figS6-correlation-matrix-StoneCanyon.jpg"), width = 5, height = 5, units = "in", dpi = 300)
+
+###### FIGURE S6 - CONTRIBUTION OF NATIVES TO ANNUAL COVER #####
+dat.cover.annuals.fr <- bind_rows(comm.dat.full.q, comm.dat.full.sc) %>% 
+  left_join(., env[,c("plot", "site", "trt", "sev")], by = c("plot" = "plot")) %>% 
+  left_join(., sp.info, by=c("code"="code")) %>% 
+  filter(duration=="annual") %>%
+  group_by(plot, site, trt, sev, duration, status) %>% 
+  summarize(cov=sum(plotavg)) %>% 
+  pivot_wider(names_from=status, values_from=cov) %>% 
+  mutate(p.annual=N/(I+N)) %>% 
+  group_by(site, trt, sev) %>% 
+  mutate(sev=as.numeric(factor(sev, levels=c("unburn", "low", "mod", "high"), labels=1:4, ordered=T)),
+         site=factor(site, levels=c("quarry", "sc"), labels=c("Quarry", "Stone Canyon"))) %>%
+  ggplot(aes(x=sev, y=p.annual, col=trt))+
+  geom_point(stat = "summary", fun = "mean", position=position_dodge(width=0.5), shape=17, size=3, geom='pointrange') +  # Plots the mean point
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.2, position=position_dodge(width=0.5))+
+  geom_point(position=position_dodge(width=0.5))+facet_wrap(.~site, nrow=1, scales="free_x", space="free_x") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) +
+  scale_color_manual(values=c("gray25","red"), labels=c("control", "Fire retardant"))+theme(legend.position = "bottom", legend.title=element_blank())+xlab("burn severity")+ylab("contribution of natives to annual cover")
+ggsave(dat.cover.annuals.fr, filename=here("output", "figS6-prop-annual-cover-by-severity-treatment.jpg"), width = 5, height = 5, units = "in", dpi = 300)
+
+
+
+
+
+
+##### SUPPLEMENTAL TABLES #####
+###### TABLE S1 - COVER AND RICHNESS IN UNBURNED AND UNTREATED PLOTS #####
+S1 <- dat %>% 
+  filter(Treatment==0 & Burn.Severity==1) %>% 
+  group_by(site) %>% 
+  summarise(native = mean(plot.cov-invasive.cov, na.rm=T), 
+            native.sd = sd(plot.cov-invasive.cov, na.rm=T),
+            invasive = mean(invasive.cov, na.rm=T), 
+            invasive.sd = sd(invasive.cov, na.rm=T), 
+            annual=mean(annual.cov), 
+            annual.sd=sd(annual.cov), 
+            native.spp = mean(plot.rich-invasive.rich), 
+            native.spp.sd =sd(plot.rich-invasive.rich), 
+            invasive.spp = mean(invasive.rich), 
+            invasive.spp.sd = sd(invasive.rich), 
+            annual.spp = mean(annual.rich),
+            annual.spp.sd = sd(annual.rich),
+            ) %>% 
+  mutate(across(where(is.numeric), round_tidy, 1)) %>%
+  unite("native", native, native.sd, sep=" ± ") %>% 
+  unite("invasive", invasive, invasive.sd, sep=" ± ") %>%
+  unite("annual", annual, annual.sd, sep=" ± ") %>%
+  unite("native.spp", native.spp, native.spp.sd, sep=" ± ") %>% 
+  unite("invasive.spp", invasive.spp, invasive.spp.sd, sep=" ± ") %>%
+  unite("annual.spp", annual.spp, annual.spp.sd, sep=" ± ") 
+S1 %>% 
+  write_csv(here("output", "S1-Veg-UntreatedUnburned.csv"))
+
+###### TABLE S2 - COMMON SPECIES #####
+n.plots <- env %>% group_by(site, trt, sev) %>% summarise(n.plots=n(), .groups = "drop")
+
+com.dat <- comm.sum.long %>% 
+  left_join(., env[,c("plot", "site")], by = c("plot" = "plot")) %>% 
+  mutate(presence=1)
+
+exq <- expand.grid(com.dat %>% filter(site=="quarry") %>% pull(plot) %>% unique(), com.dat %>% filter(site=="quarry") %>% pull(code) %>% unique()) %>% 
+  set_colnames(c("plot", "code")) 
+
+comm.dat.full.q <- com.dat[com.dat$site=="quarry", c("plot", "code", "plotavg", "presence")] %>% 
+  right_join(., exq,  by=c("plot"="plot", "code"="code")) %>% 
+  mutate(plotavg=ifelse(is.na(plotavg), 0, plotavg),
+    presence=ifelse(is.na(presence), 0, presence)) 
+
+exsc <- expand.grid(com.dat %>% filter(site=="sc") %>% pull(plot) %>% unique(), com.dat %>% filter(site=="sc") %>% pull(code) %>% unique()) %>% 
+  set_colnames(c("plot", "code")) 
+
+comm.dat.full.sc <- com.dat[com.dat$site=="sc",c("plot", "code", "plotavg", "presence")] %>% 
+  right_join(., exsc,  by=c("plot"="plot", "code"="code")) %>% 
+  mutate(plotavg=ifelse(is.na(plotavg), 0, plotavg),
+         presence=ifelse(is.na(presence), 0, presence)) 
+
+dat.cover <- bind_rows(comm.dat.full.q, comm.dat.full.sc) %>% 
+  left_join(., env[,c("plot", "site", "trt", "sev")], by = c("plot" = "plot"))  %>% 
+  filter(trt=="con" & sev=="unburn") %>% 
+  group_by(site, code) %>% 
+  summarise(mean = mean(plotavg, na.rm=T), prop=sum(presence)/n(), .groups = "drop")  %>% 
+  left_join(., sp.info, by=c("code"="code"))
+
+s2 <- dat.cover %>% 
+  group_by(site) %>% 
+ arrange(desc(prop)) %>% slice(1:10) %>% 
+  dplyr::select(site, species, prop,  mean, duration, functional.group, status) %>% 
+  mutate(prop=round_tidy(prop, 2), mean=round_tidy(mean, 1))
+s2 %>% write_csv(here("output", "S2-CommonSpp-UntreatedUnburned.csv"))
+
+
+### common species in burned
+highsev.spp <- bind_rows(comm.dat.full.q, comm.dat.full.sc) %>% 
+  left_join(., env[,c("plot", "site", "trt", "sev")], by = c("plot" = "plot"))  %>% 
+  filter(trt=="con" & sev=="high") %>% 
+  group_by(site, code) %>% 
+  summarise(mean = mean(plotavg, na.rm=T), prop=sum(presence)/n(), .groups = "drop")  %>% 
+  left_join(., sp.info, by=c("code"="code")) %>% 
+  group_by(site) %>% 
+  arrange(desc(mean)) %>% slice(1:10) %>% 
+  dplyr::select(site, species, prop,  mean, duration, functional.group, status) %>% 
+  mutate(prop=round_tidy(prop, 2), mean=round_tidy(mean, 1))
+
+
+### common species in treated
+highsev.spp <- bind_rows(comm.dat.full.q, comm.dat.full.sc) %>% 
+  left_join(., env[,c("plot", "site", "trt", "sev")], by = c("plot" = "plot"))  %>% 
+  filter(trt=="fr") %>% 
+  group_by(site, code) %>% 
+  summarise(mean = mean(plotavg, na.rm=T), prop=sum(presence)/n(), .groups = "drop")  %>% 
+  left_join(., sp.info, by=c("code"="code")) %>% 
+  group_by(site) %>% 
+  arrange(desc(mean)) %>% slice(1:10) %>% 
+  dplyr::select(site, species, prop,  mean, duration, functional.group, status) %>% 
+  mutate(prop=round_tidy(prop, 2), mean=round_tidy(mean, 1))
+
+
+###### FIGURE S6 - CONTRIBUTION OF NON-NATIVE ANNUALS TO TOTAL COVER #####
+dat.cover.annuals.fr <- bind_rows(comm.dat.full.q, comm.dat.full.sc) %>% 
+  left_join(., env[,c("plot", "site", "trt", "sev")], by = c("plot" = "plot")) %>% 
+  left_join(., sp.info, by=c("code"="code")) %>% 
+  filter(duration=="annual") %>%
+  group_by(plot, site, trt, sev, duration, status) %>% 
+  summarize(cov=sum(plotavg)) %>% 
+  pivot_wider(names_from=status, values_from=cov) %>%
+  mutate(sev=as.numeric(factor(sev, levels=c("unburn", "low", "mod", "high"), labels=1:4, ordered=T)),
+         site=factor(site, levels=c("quarry", "sc"), labels=c("Quarry", "Stone Canyon")),
+         p.native = N/(I+N)) %>%
+  ggplot(aes(x=sev, y=p.native, col=trt))+
+  geom_point(stat = "summary", fun = "mean", position=position_dodge(width=0.5), shape=17, size=3, geom='pointrange') +  # Plots the mean point
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = 0.2, position=position_dodge(width=0.5))+
+  geom_point(position=position_dodge(width=0.5))+facet_wrap(.~site, nrow=1, scales="free_x", space="free_x") +
+  scale_x_continuous(breaks = c(1, 2, 3, 4), labels = c("unburned", "low", "moderate", "high")) +
+  scale_color_manual(values=c("gray25","red"), labels=c("control", "Fire retardant"))+theme(legend.position = "bottom", legend.title=element_blank())+xlab("burn severity")+ylab("contribution of natives to annual cover")
+ggsave(dat.cover.annuals.fr, filename=here("output", "figS6-prop-annual-cover-by-severity-treatment.jpg"), width = 5, height = 3, units = "in", dpi = 300)
+
+
+
+
+###### TABLE S4 - OBSERVED NUTRIENT VALUES BY BURN SEVERITY AND TREATMENT #####
+S4a <- dat %>% 
+  group_by(site, Burn.Severity, Treatment) %>%
+  summarise(NH4 = mean(NH4, na.rm=T), 
+            NO3 = mean(NO3, na.rm=T), 
+            PO4 = mean(PO4, na.rm=T), 
+            pH = mean(pH, na.rm=T), 
+            Na = mean(Na, na.rm=T),
+            K = mean(K, na.rm=T),
+            SO4 = mean(SO4, na.rm=T),
+            .groups = "drop") %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=c(1, 2, 3, 4), labels=c("unburned", "low", "moderate", "high"), ordered=T),Treatment=factor(Treatment, levels=c(0, 1), labels=c("control", "treated"))) %>%
+  pivot_longer(cols=c(NH4, NO3, PO4, pH,  Na, K,  SO4), names_to="nutrient", values_to="value") %>% 
+  pivot_wider(names_from = Treatment, values_from = value) %>% 
+  arrange(site,  nutrient, Burn.Severity) %>% 
+  mutate(adifference=round_tidy(treated-control, 3), 
+         pchange = round_tidy(((treated-control)/control*100), 0)) %>%  
+  dplyr::select(-control, -treated)
+
+S4b <- dat %>% 
+  group_by(site, Burn.Severity, Treatment) %>%
+  summarise(NH4.mean=mean(NH4, na.rm=T), 
+            NH4.sd=sd(NH4, na.rm=T), 
+            NO3.mean=mean(NO3, na.rm=T), 
+            NO3.sd=sd(NO3, na.rm=T), 
+            PO4.mean=mean(PO4, na.rm=T), 
+            PO4.sd=sd(PO4, na.rm=T),
+            pH.mean = mean(pH, na.rm=T), 
+            pH.sd = sd(pH, na.rm=T),
+            Na.mean = mean(Na, na.rm=T),
+            Na.sd = sd(Na, na.rm=T),
+            K.mean = mean(K, na.rm=T),
+            K.sd = sd(K, na.rm=T),
+            SO4.mean = mean(SO4, na.rm=T),
+            SO4.sd = sd(SO4, na.rm=T), 
+            .groups = "drop") %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=c(1, 2, 3, 4), labels=c("unburned", "low", "moderate", "high"), ordered=T),
+         Treatment=factor(Treatment, levels=c(0, 1), labels=c("control", "treated")),
+         pH.mean=round_tidy(pH.mean, 2),
+         pH.sd=round_tidy(pH.sd, 2)) %>% 
+  mutate(across(where(is.numeric), round_tidy, 3)) %>%
+  unite("NH4", NH4.mean, NH4.sd, sep=" ± ") %>%
+  unite("NO3", NO3.mean, NO3.sd, sep=" ± ") %>%
+  unite("PO4", PO4.mean, PO4.sd, sep=" ± ") %>%
+  unite("pH", pH.mean, pH.sd, sep=" ± ")  %>%
+  unite("Na", Na.mean, Na.sd, sep=" ± ") %>%
+  unite("K", K.mean, K.sd, sep=" ± ") %>%
+  unite("SO4", SO4.mean, SO4.sd, sep=" ± ") %>%
+  pivot_longer(cols=c(NH4, NO3, PO4, pH, Na, K, SO4),names_to="nutrient", values_to="value") %>% 
+  pivot_wider(names_from = Treatment, values_from = value) %>% 
+  arrange(site,  nutrient, Burn.Severity)
+
+S4ab <- full_join(S4b, S4a, by=c("site", "Burn.Severity", "nutrient")) %>% 
+  arrange(site, nutrient, Burn.Severity) 
+
+S4ab %>% 
+  write_csv(here("output", "S4-observed-soilsXTreatmentXBurn.csv"))
+
+
+###### TABLE S5 - PARAMAETER ESTIMATES FOR OTHER SOIL NUTRIENTS AND CHEMICALS #####
+# QUARRY
 ## pH
-pH.mod.q <- lm(pH ~ Burn.Severity*Treatment, data = quarry.soils)
+pH.mod.q <- lm(pH ~ Burn.Severity*Treatment, data = q.dat)
 summary(pH.mod.q)
-pH.mod.sc <- lm(pH ~ Burn.Severity*Treatment, data = sc.soils)
-summary(pH.mod.sc)
-rm(pH.mod.q);rm(pH.mod.sc)
+plot(residuals(pH.mod.q))
+qqnorm(residuals(pH.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(pH.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
 
 ## Na
-Na.mod.q <- lm(Na ~ Burn.Severity*Treatment, data = quarry.soils)
+Na.mod.q <- lm(Na ~ Burn.Severity*Treatment, data =  q.dat)
 summary(Na.mod.q)
-Na.mod.sc <- lm(Na ~ Burn.Severity*Treatment, data = sc.soils)
-summary(Na.mod.sc)
-rm(Na.mod.q);rm(Na.mod.sc)
+plot(residuals(Na.mod.q))
+qqnorm(residuals(Na.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(Na.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
 
 ## K
-K.mod.q <- lm(K ~ Burn.Severity*Treatment, data = quarry.soils)
+K.mod.q <- lm(K ~ Burn.Severity*Treatment, data =  q.dat)
 summary(K.mod.q)
-K.mod.sc <- lm(K ~ Burn.Severity*Treatment, data = sc.soils)
-summary(K.mod.sc)
-rm(K.mod.q);rm(K.mod.sc)
+plot(residuals(K.mod.q))
+qqnorm(residuals(K.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(K.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
 
 ## SO4
-SO4.mod.q <- lm(SO4 ~ Burn.Severity*Treatment, data = quarry.soils)
+SO4.mod.q <- lm(SO4 ~ Burn.Severity*Treatment, data =  q.dat)
 summary(SO4.mod.q)
-SO4.mod.sc <- lm(SO4 ~ Burn.Severity*Treatment, data = sc.soils)
-summary(SO4.mod.sc)
-rm(SO4.mod.q);rm(SO4.mod.sc)
+plot(residuals(SO4.mod.q))
+qqnorm(residuals(SO4.mod.q), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(SO4.mod.q), col = "red", lwd = 2, lty = 2) ## okay enough
 
-## Looking into how much the nutrients vary across treatments
-aggregate(quarry.soils$NH4 ~ quarry.soils$Treatment, FUN= mean)
-aggregate(sc.soils$NH4 ~ sc.soils$Treatment, FUN= mean)
+modList.other <- psem(pH.mod.q, Na.mod.q, K.mod.q, SO4.mod.q, data =q.dat)
+coef.summary.other <- summary(modList.other )$coefficients %>% 
+  as.data.frame() %>%  
+  set_colnames(c("Response", "Predictor", "Estimate", "Std.Error", "DF", "Crit.Value", "P.value", "Std.Estimate", "Significance")) %>%
+  mutate(site="Quarry") 
+r2.summary.other  <- summary(modList.other )$R2 %>% as.data.frame() %>% mutate(site="Quarry")
 
-aggregate(quarry.soils$NO3 ~ quarry.soils$Treatment, FUN= mean) ## order of magnitude greater
-aggregate(sc.soils$NO3 ~ sc.soils$Treatment, FUN= mean)
 
-aggregate(quarry.soils$PO4 ~ quarry.soils$Treatment, FUN= mean) ## order of magnitude greater
-aggregate(sc.soils$PO4 ~ sc.soils$Treatment, FUN= mean) ## two orders of magnitude greater
-## consistently higher soil nutrient concentrations in the fire retardant treatments
-
-#### Figure 2 - Soils ####
-soils$Burn.Severity[soils$Burn.Severity == "Fire  Line"] <- "Burned"
-soils$Burn.Severity[soils$Burn.Severity == "Burned"] <- "Low"
-
-se <- function(x){sd(x)/sqrt(length(x))} ## creating a function for standard error
-soils$plotting <- ifelse(soils$Burn.Severity == "Unburned" & soils$Treatment == "Control", "UCON",
-                                ifelse(soils$Burn.Severity == "Unburned" & soils$Treatment == "Fire Retardant", "UFR",
-                                       ifelse(soils$Burn.Severity == "Low" & soils$Treatment == "Control", "LCON",
-                                              ifelse(soils$Burn.Severity == "Low" & soils$Treatment == "Fire Retardant", "LFR", 
-                                                     ifelse(soils$Burn.Severity == "Moderate" & soils$Treatment == "Control", "MCON",
-                                                            ifelse(soils$Burn.Severity == "Moderate" & soils$Treatment == "Fire Retardant", "MFR",
-                                                                   ifelse(soils$Burn.Severity == "High" & soils$Treatment == "Control", "HCON",
-                                                                          ifelse(soils$Burn.Severity == "High" & soils$Treatment == "Fire Retardant", "HFR", NA))))))))
-## setting figure parameters 
-Fig2order.sc <- c("UCON","LCON")
-vec1.sc <- c(0.9,1.9)
-Fig2paired.sc <- c("UFR","LFR")
-vec2.sc <- c(1.1,2.1)
-
-Fig2order.q <- c("UCON","LCON","MCON","HCON")
-vec1.q <- c(0.9,1.9,2.9,3.9)
-Fig2paired.q <- c("UFR","LFR","MFR","HFR")
-vec2.q <- c(1.1,2.1,3.1,4.1)
-
-SC <- soils[soils$Location == "Stone Canyon",]
-Quarry <- soils[soils$Location == "Quarry",]
-
-par(mfrow = c(3,2))
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'NH4'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'NO3'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'PO4'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-#### Management Brief Soils Figure ####
-par(mfrow = c(2,2))
-nut <- "NH4"
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(Quarry[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-nut <- "NO3"
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(Quarry[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-nut <- "PO4"
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(Quarry[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-#### Supplemental Soil Nutrient Figures ####
+# STONE CANYON
 ## pH
-## change the nutrients of interest based on the column name in soils df
-par(mfrow = c(1,2))
-nut <- 'pH'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(5,9),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 7, lty = 2)
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
+pH.mod.sc <- lm(pH ~ Burn.Severity+Treatment, data = sc.dat)
+summary(pH.mod.sc)
+plot(residuals(pH.mod.sc))
+qqnorm(residuals(pH.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(pH.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
 
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(5,9),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 7, lty = 2)
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
+## Na
+Na.mod.sc <- lm(Na ~ Burn.Severity+Treatment, data =  sc.dat)
+summary(Na.mod.sc)
+plot(residuals(Na.mod.sc))
+qqnorm(residuals(Na.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(Na.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
 
-## Na, K, SO4
-par(mfrow = c(3,2))
+## K
+K.mod.sc <- lm(K ~ Burn.Severity+Treatment, data =  sc.dat)
+summary(K.mod.sc)
+plot(residuals(K.mod.sc))
+qqnorm(residuals(K.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(K.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
 
-## change the nutrients of interest based on the column name in soils df
-nut <- 'Na'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
+## SO4
+SO4.mod.sc <- lm(SO4 ~ Burn.Severity+Treatment, data =  sc.dat)
+summary(SO4.mod.sc)
+plot(residuals(SO4.mod.sc))
+qqnorm(residuals(SO4.mod.sc), pch = 16, cex = .75, col = rgb(0,0,0,0.75))
+qqline(residuals(SO4.mod.sc), col = "red", lwd = 2, lty = 2) ## okay enough
 
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
+modList.other <- psem(pH.mod.sc, Na.mod.sc, K.mod.sc, SO4.mod.sc, data =sc.dat)
+coef.summary.other <- bind_rows(coef.summary.other, 
+                                summary(modList.other )$coefficients %>% 
+                                  as.data.frame() %>%  
+                                  set_colnames(c("Response", "Predictor", "Estimate", "Std.Error", "DF", "Crit.Value", "P.value", "Std.Estimate", "Significance")) %>%
+                                  mutate(site="Stone Canyon"))
+r2.summary.other  <- bind_rows(r2.summary.other, summary(modList.other )$R2 %>% as.data.frame() %>% mutate(site="Stone Canyon"))
+r2.summary.other %>% write.csv(here("output", "SEM-r2summary-other.csv"), row.names=F)
 
-## change the nutrients of interest based on the column name in soils df
-nut <- 'K'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'SO4'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(soils[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-rm(Quarry);rm(SC);rm(Fig2order.q);rm(Fig2paired.q);rm(Fig2order.sc);rm(Fig2paired.sc)
-rm(i);rm(vec1.sc);rm(vec2.sc);rm(vec1.q);rm(vec2.q)
-rm(nut)
-par(mfrow = c(1,1))
+coef.summary.other  %>% 
+  mutate(Estimate=round_tidy(Estimate, 3), 
+         Std.Error=round_tidy(Std.Error, 3), 
+         Crit.Value=round_tidy(Crit.Value, 3), 
+         P.value=round_tidy(P.value, 3), 
+         Std.Estimate=round_tidy(Std.Estimate, 3)) %>% 
+           unite("Estimate", Estimate,  Std.Error, sep=" (") %>% 
+  mutate(Estimate=paste0(Estimate, ")")) %>%
+  dplyr::select(site, Response, Predictor, Estimate, Std.Estimate, Significance) %>% 
+  pivot_wider(names_from=Response, values_from=c(Estimate, Std.Estimate, Significance)) %>% 
+  dplyr::select(site, Predictor,
+                Estimate_pH, Std.Estimate_pH, Significance_pH,
+                Estimate_Na, Std.Estimate_Na, Significance_Na,
+                Estimate_K, Std.Estimate_K, Significance_K,
+                Estimate_SO4, Std.Estimate_SO4, Significance_SO4) %>% 
+   write.csv(here("output", "SEM-coefsummary-other.csv"), row.names=F)
 
 
-#### Question 2  ####
-## Community Composition Question
-## How do vegetative communities in fire-retardant drop zones differ in species richness, 
-## community composition, and cover compared to burned, unburned, and adjacent fire 
-## perimeter sites without drops?
+###### TABLE S6 - MARGINAL MEANS OF SOIL NUTRIENTS BY TREATMENT AND FIRE SEVERITY #####
+S6.q <-  list (NH4.mod.q, NO3.mod.q, P.mod.q, pH.mod.q, Na.mod.q, K.mod.q, SO4.mod.q) %>% 
+  set_names(c("NH4", "NO3", "PO4", "pH", "Na", "K", "SO4")) %>% 
+  lapply(estimate_means, by=c("Treatment", "Burn.Severity")) %>% 
+  bind_rows(.id="response") %>% 
+  mutate(Mean=ifelse(Mean<0, 0, Mean)) %>% 
+  dplyr::select(response, Treatment,Burn.Severity, Mean, SE) %>%
+  pivot_wider(names_from = c(Treatment), values_from = c(Mean, SE)) %>% 
+  mutate(adif=round_tidy(`Mean_1`-`Mean_0`, 3),
+         pchange= round_tidy((`Mean_1`-`Mean_0`)/`Mean_0`*100,0)) %>% 
+  mutate(across(where(is.numeric), round_tidy, 3)) %>% 
+  unite(Control, Mean_0, SE_0, sep=" ± ") %>% 
+  unite(Treated, Mean_1, SE_1, sep=" ± ") %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=round_tidy(1:4, 3), labels=c("unburned", "low", "moderate","high")), 
+         pchange=ifelse( pchange==Inf, NA,  pchange), 
+         site="Quarry")
 
-## part 1 - general trend cover/richness (boxplots)  - supplement split them
-## part 2 - general trend cover/richness (native vs. invasive spp.) - supplement split them
-## part 3 - glmm broken out by site (look at site differences)
-## part 4 - ordination of whole comm (site being a split)
+S6.sc <-  list (NH4.mod.sc, NO3.mod.sc, P.mod.sc, pH.mod.sc, Na.mod.sc, K.mod.sc, SO4.mod.sc) %>% 
+  set_names(c("NH4", "NO3", "PO4", "pH", "Na", "K", "SO4")) %>% 
+  lapply(estimate_means, by=c("Treatment", "Burn.Severity")) %>% 
+  bind_rows(.id="response") %>% 
+  mutate(Mean=ifelse(Mean<0, 0, Mean)) %>% 
+  dplyr::select(response, Treatment,Burn.Severity, Mean, SE) %>%
+  pivot_wider(names_from = c(Treatment), values_from = c(Mean, SE)) %>% 
+  mutate(adif=round_tidy(`Mean_1`-`Mean_0`, 3),
+         pchange= round_tidy((`Mean_1`-`Mean_0`)/`Mean_0`*100,0)) %>% 
+  mutate(across(where(is.numeric), round_tidy, 3)) %>% 
+  unite(Control, Mean_0, SE_0, sep=" ± ") %>% 
+  unite(Treated, Mean_1, SE_1, sep=" ± ") %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=round_tidy(1:2, 3), labels=c("unburned", "low")), 
+         pchange=ifelse( pchange==Inf, NA,  pchange), 
+         site="Stone Canyon")
 
-## part 1.1 - richness between control and trt
-PlotRichness$sev <- env$sev[match(rownames(PlotRichness),env$plot)]
-PlotRichness$trt <- env$trt[match(rownames(PlotRichness),env$plot)]
-PlotRichness$site <- env$site[match(rownames(PlotRichness),env$plot)]
-
-str(PlotRichness)
-t.test(PlotRichness$richness~ PlotRichness$site, na.rm = TRUE)
-## difference between the two sites (quarry has fewer species on average)
-
-## part 1.2  - cover between control and trt
-PlotCov$sev <- env$sev[match(rownames(PlotCov),env$plot)]
-PlotCov$trt <- env$trt[match(rownames(PlotCov),env$plot)]
-PlotCov$site <- env$site[match(rownames(PlotCov),env$plot)]
-
-str(PlotCov)
-t.test(PlotCov$TotalPlotCover~ PlotCov$site, na.rm = TRUE)
-## no difference in plot cover between sites
-
-## part 2 - native and invasive cover
-## separate out native vs. invasive species for comparison across burn severities (basically do part 1 but 4 times)
-## plot level proportion richness Invasive /proportion cover invasive
-## functional group and life history can be added if interested
-
-status <- comm.sum
-colnames(status)
-match(colnames(status), sp.info$code)
-
-native <- status[,colnames(status) %in% sp.info$code[sp.info$status == "N"]]
-invasive <- status[,colnames(status) %in% sp.info$code[sp.info$status == "I"]]
-annual <- status[,colnames(status) %in% sp.info$code[sp.info$duration == "annual"]]
-perennial <- status[,colnames(status) %in% sp.info$code[sp.info$duration == "perennial"]]
-
-env$X <- NULL
-
-native.cov <- data.frame(native.cov = apply(native, 1 , sum),
-                         plot = rownames(native))
-invasive.cov <- data.frame(invasive.cov = apply(invasive,1,sum),
-                           plot = rownames(invasive))
-annual.cov <- data.frame(annual.cov = apply(annual, 1 , sum),
-                         plot = rownames(annual))
-perennial.cov <- data.frame(perennial.cov = apply(perennial, 1 , sum),
-                         plot = rownames(perennial))
-env$native.cov <- native.cov$native.cov[match(native.cov$plot, env$plot)]
-env$invasive.cov <- invasive.cov$invasive.cov[match(invasive.cov$plot, env$plot)]
-env$annual.cov <- annual.cov$annual.cov[match(annual.cov$plot, env$plot)]
-env$perennial.cov <- perennial.cov$perennial.cov[match(perennial.cov$plot, env$plot)]
-
-env$prop.inv.cov <- env$invasive.cov/(env$native.cov+env$invasive.cov)
-env$prop.ann.cov <- env$annual.cov/(env$perennial.cov+env$annual.cov)
-hist(env$prop.inv.cov)
-hist(env$prop.ann.cov)
-
-grad <- native.cov
-grad$invasive.cov <- invasive.cov$invasive.cov[match(grad$plot, invasive.cov$plot)]
-grad$annual.cov <- annual.cov$annual.cov[match(grad$plot, annual.cov$plot)]
-grad$plot.cov <- PlotCov$TotalPlotCover[match(grad$plot, rownames(PlotCov))]
-grad$plot.rich <- PlotRichness$richness[match(grad$plot, rownames(PlotRichness))]
-grad$NO3 <- soils$NO3[match(grad$plot, soils$Field.ID)]
-grad$NH4 <- soils$NH4[match(grad$plot, soils$Field.ID)]
-grad$PO4 <- soils$PO4[match(grad$plot, soils$Field.ID)]
-grad$site <- soils$Location[match(grad$plot, soils$Field.ID)]
-grad$prop.inv <- grad$invasive.cov/grad$plot.cov
-grad$prop.ann <- grad$annual.cov/grad$plot.cov
-grad$trt <- PlotCov$trt[match(grad$plot, rownames(PlotCov))]
-grad$sev <- PlotCov$sev[match(grad$plot, rownames(PlotCov))]
-
-rm(native.cov);rm(invasive.cov)
-
-native <- ifelse(native > 0, 1,0)
-invasive <- ifelse(invasive > 0,1,0)
-annual <- ifelse(annual > 0, 1,0)
-perennial <- ifelse(perennial > 0,1,0)
-
-env$native.sp <- apply(native, 1 , sum)
-env$invasive.sp <- apply(invasive, 1, sum)
-env$annual.sp <- apply(annual, 1 , sum)
-env$perennial.sp <- apply(perennial, 1, sum)
-
-env$prop.inv.sp <- env$invasive.sp/(env$native.sp+env$invasive.sp)
-grad$prop.inv.sp <- env$prop.inv.sp[match(grad$plot, env$plot)]
-env$prop.ann.sp <- env$annual.sp/(env$perennial.sp+env$annual.sp)
-grad$prop.ann.sp <- env$prop.ann.sp[match(grad$plot, env$plot)]
-hist(env$prop.inv.sp)
-hist(env$prop.ann.sp)
-
-hist(env$prop.inv.sp[env$trt == "con"])
-hist(env$prop.inv.sp[env$trt == "fr"])
-
-hist(env$prop.ann.sp[env$trt == "con"])
-hist(env$prop.ann.sp[env$trt == "fr"])
-
-#### Linear Models to address Q2 ####
-grad$trt <- factor(grad$trt, levels = c("con", "fr"))
-grad$sev <- factor(grad$sev, levels = c("unburn", "low", "mod", "high"))
-str(grad)
-pseudo.R.squared <- function(model){
-  1 - (model$deviance/model$null.deviance)
-}
-q.grad <- grad[grad$site == "Quarry",]
-sc.grad <- grad[grad$site == "Stone Canyon",]
-
-## Quarry models
-## response ~ soils + trt + severity
-summary(lm(plot.cov ~ NO3+NH4+PO4+trt+sev,data = q.grad)) ## keeping in the trt and sev to control for it
-summary(lm(prop.inv ~ NO3+NH4+PO4+trt+sev,data = q.grad))
-summary(lm(prop.ann ~ NO3+NH4+PO4+trt+sev,data = q.grad))
-summary(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = q.grad, family = poisson(link = "log")))
-pseudo.R.squared(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = q.grad, family = poisson(link = "log")))
-summary(lm(prop.inv.sp ~ NO3+NH4+PO4+trt+sev,data = q.grad))
-summary(lm(prop.ann.sp ~ NO3+NH4+PO4+trt+sev,data = q.grad))
+S6 <- bind_rows(S6.q, S6.sc) %>% 
+  write.csv(here("output", "S6-marginalmeans-soilsXTreatmentXBurn.csv"), row.names=F)
 
 
-## Stone canyon
-## response ~ soils + trt + severity
-summary(lm(plot.cov ~ NO3+NH4+PO4+trt+sev,data = sc.grad)) ## keeping in the trt and sev to control for it
-summary(lm(prop.inv ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
-summary(lm(prop.ann ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
-summary(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = sc.grad, family = poisson(link = "log")))
-pseudo.R.squared(glm(plot.rich ~ NO3+NH4+PO4+trt+sev,data = sc.grad, family = poisson(link = "log")))
-summary(lm(prop.inv.sp ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
-summary(lm(prop.ann.sp ~ NO3+NH4+PO4+trt+sev,data = sc.grad))
+
+###### TABLE S7 - PLANT COVER BY BURN SEVERITY AND TREATMENT #####
+S7a <- dat %>% 
+  group_by(site, Burn.Severity, Treatment) %>%
+  summarise(plot.cov = mean(plot.cov, na.rm=T), 
+            prop.inv.cov = mean(prop.inv.cov , na.rm=T), 
+            prop.ann.cov  = mean(prop.ann.cov, na.rm=T), 
+            plot.rich = mean(plot.rich, na.rm=T), 
+            prop.inv.sp = mean(prop.inv.sp, na.rm=T), 
+            prop.ann.sp  = mean(prop.ann.sp, na.rm=T), 
+            .groups = "drop") %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=c(1, 2, 3, 4), labels=c("unburned", "low", "moderate", "high"), ordered=T),Treatment=factor(Treatment, levels=c(0, 1), labels=c("control", "treated"))) %>%
+  pivot_longer(cols=c(plot.cov, prop.inv.cov, prop.ann.cov, plot.rich, prop.inv.sp, prop.ann.sp), names_to="community", values_to="value") %>% 
+  pivot_wider(names_from = Treatment, values_from = value) %>% 
+  arrange(site,  community, Burn.Severity) %>% 
+  mutate(difference=round_tidy(treated-control,2), 
+         pchange =round(((treated-control)/control)*100, 0)) %>% 
+  dplyr::select(-control, -treated)
+
+S7b <- dat %>% 
+  group_by(site, Burn.Severity, Treatment) %>%
+  summarise(plot.cov.mean = mean(plot.cov, na.rm=T), 
+            plot.cov.sd =sd(plot.cov, na.rm=T),
+            prop.inv.cov.mean  = mean(prop.inv.cov , na.rm=T), 
+            prop.inv.cov.sd = sd(prop.inv.cov , na.rm=T),
+            prop.ann.cov.mean   = mean(prop.ann.cov, na.rm=T), 
+            prop.ann.cov.sd = sd(prop.ann.cov, na.rm=T),
+            plot.rich.mean  = mean(plot.rich, na.rm=T), 
+            plot.rich.sd = sd(plot.rich, na.rm=T),
+            prop.inv.sp.mean  = mean(prop.inv.sp, na.rm=T), 
+            prop.inv.sp.sd = sd(prop.inv.sp, na.rm=T),
+            prop.ann.sp.mean   = mean(prop.ann.sp, na.rm=T), 
+            prop.ann.sp.sd = sd(prop.ann.sp, na.rm=T),
+            .groups = "drop")  %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=c(1, 2, 3, 4), labels=c("unburned", "low", "moderate", "high"), ordered=T),
+         Treatment=factor(Treatment, levels=c(0, 1), labels=c("control", "treated"))) %>% 
+  mutate(plot.cov.mean=round_tidy(plot.cov.mean, 1), 
+         plot.cov.sd  = round_tidy(plot.cov.sd, 1),
+         plot.rich.mean=round_tidy(plot.rich.mean, 1),
+         plot.rich.sd =round_tidy(plot.rich.sd, 1)) %>% 
+  mutate(across(where(is.numeric), round_tidy, 2)) %>%
+  unite("plot.cov", plot.cov.mean ,plot.cov.sd, sep=" ± ") %>%
+  unite("prop.inv.cov", prop.inv.cov.mean , prop.inv.cov.sd, sep=" ± ") %>%
+  unite("prop.ann.cov", prop.ann.cov.mean , prop.ann.cov.sd, sep=" ± ") %>%
+  unite("plot.rich", plot.rich.mean , plot.rich.sd, sep=" ± ") %>%
+  unite("prop.inv.sp", prop.inv.sp.mean , prop.inv.sp.sd, sep=" ± ") %>%
+  unite("prop.ann.sp", prop.ann.sp.mean , prop.ann.sp.sd, sep=" ± ") %>%
+  pivot_longer(cols=c(plot.cov, prop.inv.cov, prop.ann.cov, plot.rich, prop.inv.sp, prop.ann.sp), names_to="community", values_to="value") %>% 
+  pivot_wider(names_from = Treatment, values_from = value) %>% 
+  arrange(site,  community, Burn.Severity)
+
+S7ab <- full_join(S7b, S7a, by=c("site", "Burn.Severity", "community")) %>% 
+  arrange(site, community, Burn.Severity) 
+
+S7ab %>% 
+  write_csv(here("output", "S7-obseved-vegXTreatmentXBurn.csv"))
 
 
-#### Figure 4 - Richness ####
-se <- function(x){sd(x)/sqrt(length(x))} ## creating a function for standard error
-sc.grad$plotting <- ifelse(sc.grad$sev == "unburn" & sc.grad$tr == "con", "UCON",
-                           ifelse(sc.grad$sev == "unburn" & sc.grad$tr == "fr", "UFR",
-                                  ifelse(sc.grad$sev == "low" & sc.grad$tr == "con", "LCON",
-                                         ifelse(sc.grad$sev == "low" & sc.grad$tr == "fr", "LFR", 
-                                                ifelse(sc.grad$sev == "mod" & sc.grad$tr == "con", "MCON",
-                                                       ifelse(sc.grad$sev == "mod" & sc.grad$tr == "fr", "MFR",
-                                                              ifelse(sc.grad$sev == "high" & sc.grad$tr == "con", "HCON",
-                                                                     ifelse(sc.grad$sev == "high" & sc.grad$tr == "fr", "HFR", NA))))))))
-q.grad$plotting <- ifelse(q.grad$sev == "unburn" & q.grad$tr == "con", "UCON",
-                           ifelse(q.grad$sev == "unburn" & q.grad$tr == "fr", "UFR",
-                                  ifelse(q.grad$sev == "low" & q.grad$tr == "con", "LCON",
-                                         ifelse(q.grad$sev == "low" & q.grad$tr == "fr", "LFR", 
-                                                ifelse(q.grad$sev == "mod" & q.grad$tr == "con", "MCON",
-                                                       ifelse(q.grad$sev == "mod" & q.grad$tr == "fr", "MFR",
-                                                              ifelse(q.grad$sev == "high" & q.grad$tr == "con", "HCON",
-                                                                     ifelse(q.grad$sev == "high" & q.grad$tr == "fr", "HFR", NA))))))))
+###### TABLE S8 - MARGINAL MEAN PLANT COVER BY TREATMENT AND BURN SEVERITY #####
 
-## setting figure parameters 
-Fig2order.sc <- c("UCON","LCON")
-vec1.sc <- c(0.9,1.9)
-Fig2paired.sc <- c("UFR","LFR")
-vec2.sc <- c(1.1,2.1)
+S8.q <- list (cov.mod.q, icov.mod.q, acov.mod.q, rich.mod.q, irich.mod.q, arich.mod.q) %>% 
+  set_names(c("total cover", "prop. non-native cover", "prop. annual cover", "species richnes", "prop. non-native richness", "prop. annual richness")) %>% 
+  lapply(estimate_means, by=c("Treatment", "Burn.Severity")) %>% 
+  bind_rows(.id="response") %>% 
+  mutate(Mean=ifelse(Mean<0, 0, Mean)) %>% 
+  dplyr::select(response, Treatment,Burn.Severity, Mean, SE) %>%
+  pivot_wider(names_from = c(Treatment), values_from = c(Mean, SE)) %>% 
+  mutate(adif=round_tidy(`Mean_1`-`Mean_0`, 2),
+         pchange= round_tidy((`Mean_1`-`Mean_0`)/`Mean_0`*100,0)) %>% 
+  mutate(across(where(is.numeric), round_tidy, 2)) %>% 
+  unite(Control, Mean_0, SE_0, sep=" ± ") %>% 
+  unite(Treated, Mean_1, SE_1, sep=" ± ") %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=round_tidy(1:4, 2), labels=c("unburned", "low", "moderate","high")), 
+         pchange=ifelse( pchange==Inf, NA,  pchange), 
+         site="Quarry")
 
-Fig2order.q <- c("UCON","LCON","MCON","HCON")
-vec1.q <- c(0.9,1.9,2.9,3.9)
-Fig2paired.q <- c("UFR","LFR","MFR","HFR")
-vec2.q <- c(1.1,2.1,3.1,4.1)
+S8.sc <- list (cov.mod.sc, icov.mod.sc, acov.mod.sc, rich.mod.sc, irich.mod.sc, arich.mod.sc) %>% 
+  set_names(c("total cover", "prop. non-native cover", "prop. annual cover", "species richnes", "prop. non-native richness", "prop. annual richness")) %>% 
+  lapply(estimate_means, by=c("Treatment", "Burn.Severity")) %>% 
+  bind_rows(.id="response") %>% 
+  mutate(Mean=ifelse(Mean<0, 0, Mean)) %>% 
+  dplyr::select(response, Treatment,Burn.Severity, Mean, SE) %>%
+  pivot_wider(names_from = c(Treatment), values_from = c(Mean, SE)) %>% 
+  mutate(adif=round_tidy(`Mean_1`-`Mean_0`, 2),
+         pchange= round_tidy((`Mean_1`-`Mean_0`)/`Mean_0`*100,0)) %>% 
+  mutate(across(where(is.numeric), round_tidy, 2)) %>% 
+  unite(Control, Mean_0, SE_0, sep=" ± ") %>% 
+  unite(Treated, Mean_1, SE_1, sep=" ± ") %>% 
+  mutate(Burn.Severity= factor(Burn.Severity, levels=round_tidy(1:4, 2), labels=c("unburned", "low", "moderate","high")), 
+         pchange=ifelse( pchange==Inf, NA,  pchange), 
+         site="Stone Canyon")
 
-SC <- sc.grad
-Quarry <- q.grad
-
-par(mfrow = c(3,2))
-
-## change the nut variable (borrowed from soils code) based on the column name in grad df
-nut <- 'plot.rich'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(grad[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(grad[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'prop.inv.sp'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-abline(h = 0.5, lty = 2)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'prop.ann.sp'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-#### Figure 3 - Cover ####
-par(mfrow = c(3,2))
-
-## change the nut variable (borrowed from soils code) based on the column name in grad df
-nut <- 'plot.cov'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(grad[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,max(grad[,nut])),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'prop.inv'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-abline(h = 0.5, lty = 2)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-## change the nutrients of interest based on the column name in soils df
-nut <- 'prop.ann'
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-plot(x = c(0.5:2.5),
-     y = c(0.5:2.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:2), line = 1, tick = F, labels = c("Unburned", "Low"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.sc)){
-  points(x = rep(vec1.sc[i], length(SC[,nut][SC$plotting == Fig2order.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2order.sc[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.sc[i], length(SC[,nut][SC$plotting == Fig2paired.sc[i]])),
-         y = SC[,nut][SC$plotting == Fig2paired.sc[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2order.sc[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])-se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x0 = vec1.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2order.sc[i]])+se(SC[,nut][SC$plotting == Fig2order.sc[i]])), x1 = vec1.sc[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.sc[i]+0.1,
-         y = mean(SC[,nut][SC$plotting == Fig2paired.sc[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])-se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x0 = vec2.sc[i]+0.1, 
-           y1 = (mean(SC[,nut][SC$plotting == Fig2paired.sc[i]])+se(SC[,nut][SC$plotting == Fig2paired.sc[i]])), x1 = vec2.sc[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-#### Management Brief Cover Figure ####
-par(mfrow = c(2,2))
-nut <- "plot.cov"
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,max(Quarry$plot.cov)),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-nut <- "prop.inv"
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-nut <- "prop.ann"
-plot(x = c(0.5:4.5),
-     y = c(0.5:4.5),
-     ylim = c(0,1),
-     las = 1,
-     cex.axis = 1.5,
-     ylab = "", ## density
-     type = "n",
-     xaxt = "n",
-     xlab = "") ## disturbance history
-abline(h = 0.5, lty = 2)
-axis(1, at = c(1:4), line = 1, tick = F, labels = c("Unburned", "Low", "Moderate", "High"), cex.axis = 1.5)
-for(i in 1:length(Fig2order.q)){
-  points(x = rep(vec1.q[i], length(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2order.q[i]],
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 19)
-  points(x = rep(vec2.q[i], length(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])),
-         y = Quarry[,nut][Quarry$plotting == Fig2paired.q[i]],
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 19)
-  
-  points(x = vec1.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]]),
-         col = rgb(0,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x0 = vec1.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2order.q[i]])), x1 = vec1.q[i]+0.1, 
-           col = rgb(0,0,0),lwd = 1.5)
-  
-  points(x = vec2.q[i]+0.1,
-         y = mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]]),
-         col = rgb(1,0,0, alpha = 0.5),
-         pch = 17)
-  segments(y0 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])-se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x0 = vec2.q[i]+0.1, 
-           y1 = (mean(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])+se(Quarry[,nut][Quarry$plotting == Fig2paired.q[i]])), x1 = vec2.q[i]+0.1, 
-           col = rgb(1,0,0),lwd = 1.5)
-  
-}
-
-rm(Quarry);rm(SC);rm(Fig2order.q);rm(Fig2paired.q);rm(Fig2order.sc);rm(Fig2paired.sc)
-rm(i);rm(vec1.sc);rm(vec2.sc);rm(vec1.q);rm(vec2.q)
-rm(nut)
+S8 <- bind_rows(S8.q, S8.sc) %>% 
+  write.csv(here("output", "S8-marginalmeans-vegXTreatmentXBurn.csv"), row.names=F)
 
 
-# #### Supplemental - cov ~ PO4 ####
-# par(mfrow = c(1,1))
-# 
-# mod <- lm(plot.cov ~ NO3+NH4+PO4+trt+sev, data = q.grad)
-# plot(plot.cov ~ PO4, data = q.grad,
-#      las = 1,
-#      log = "y",
-#      cex.axis = 1.5,
-#      pch = 16,
-#      cex = 0.75,
-#      xlab = " ",
-#      ylab = " ")
-# newdata <- data.frame(NO3=mean(q.grad$NO3, na.rm = T),
-#                       NH4=mean(q.grad$NH4, na.rm = T),
-#                       PO4=seq(min(q.grad$PO4, na.rm = T), max(q.grad$PO4, na.rm = T), length.out = 30),
-#                       trt=q.grad$trt[1],
-#                       sev=q.grad$sev[1])
-# preds <- predict(mod, newdata, type = "response", se.fit = TRUE)
-# preds$upperci <- preds$fit + (1.96*preds$se.fit)
-# preds$lowerci <- preds$fit - (1.96*preds$se.fit)
-# polygon(x = c(newdata$PO4, rev(newdata$PO4)),
-#         y = c(preds$lowerci, rev(preds$upperci)),
-#         col = adjustcolor("black", alpha.f = 0.25),
-#         border = NA)
-# lines(newdata$PO4, preds$fit, lty = 1)
-# 
 
-#### Question 2 - Supplemental Ordinations ####
-str(env)
-env$sev <- factor(env$sev, levels = c("unburn", "low", "mod", "high"))
-env$trt <- as.factor(env$trt)
-levels(env$sev)
-env$NO3 <- soils$NO3[match(env$plot, soils$Field.ID)]
-env$NH4 <- soils$NH4[match(env$plot, soils$Field.ID)]
-env$PO4 <- soils$PO4[match(env$plot, soils$Field.ID)]
-env$tot.cov <- PlotCov$TotalPlotCover[match(env$plot, rownames(PlotCov))]
-env$rich <- PlotRichness$richness[match(env$plot, rownames(PlotRichness))]
+###### SUPPLEMENTAL ORDINATIONS #####
+
+pal <- c("#f6d746", "#e55c30", "#84206b", "#140b34")
+pal2 <- c("black", "red")
 
 
 ## Quarry Fire  
 Quarry <- as.matrix(comm.sum[match(env$plot[env$site == "quarry"], rownames(comm.sum)),])
 str(Quarry)
-env.q <- env[match(rownames(Quarry),env$plot),]
+env.q <- q.dat %>% 
+  mutate(sev = factor(Burn.Severity, levels=c(1, 2, 3, 4), labels=c("unburned", "low", "mod", "high"), ordered=T), 
+         trt = factor(Treatment, levels=c(0, 1), labels=c("control", "treated"))) 
+
+env.q <- env.q[,c("sev", "trt", "NO3", "NH4", "PO4", "plot.cov", "plot.rich", "prop.inv.cov", "prop.ann.cov", "prop.inv.sp", "prop.ann.sp")] %>% 
+  set_colnames(c("sev", "trt", "NO3", "NH4", "PO4", "total cover", "total richness", "prop. invasive cover", "prop. annual coverv", "prop. invasive species", "prop. annual species"))
 
 ## Stone Canyon 
 SC <- as.matrix(comm.sum[match(env$plot[env$site == "sc"], rownames(comm.sum)),])
 str(SC)
-env.sc <- env[match(rownames(SC),env$plot),]
+env.sc <- sc.dat %>% 
+  mutate(sev = factor(Burn.Severity, levels=c(1, 2), labels=c("unburned", "low"), ordered=T), 
+         trt = factor(Treatment, levels=c(0, 1), labels=c("control", "treated"))) 
 
-pal <- c("#f6d746", "#e55c30", "#84206b", "#140b34")
-pal2 <- c("black", "red")
+env.sc <- env.sc[,c("sev", "trt", "NO3", "NH4", "PO4", "plot.cov", "plot.rich", "prop.inv.cov", "prop.ann.cov", "prop.inv.sp", "prop.ann.sp")] %>% 
+  set_colnames(c("sev", "trt", "NO3", "NH4", "PO4", "total cover", "total richness", "prop. invasive cover", "prop. annual coverv", "prop. invasive species", "prop. annual species"))
+
+
 
 
 ## Quarry NMDS Ordination
@@ -1875,6 +1508,7 @@ set.seed(1)
 NMDSord.q <- metaMDS(Quarry, k = 3, try = 1000, distance = "bray") ## convergence
 stressplot(NMDSord.q,
            main = "Quarry Fire")
+
 ## Stone Canyon NMDS Ordination
 ord.nmds.stress.sc <- rep(NA,10)
 for(i in 1:10){
@@ -1894,11 +1528,46 @@ NMDSord.sc <- metaMDS(SC, k = 4, try = 1000, distance = "bray") ## convergence
 stressplot(NMDSord.sc,
            main = "Stone Canyon")
 
+
+jpeg(here("output/Scree.jpeg"), width = 700, height = 500)
+par(mfrow = c(2,2), cex.main = 1.25, cex.lab = 1.25, cex.axis=1.25, cex = 1)
+plot(ord.nmds.stress.q,
+     ylim = c(0,1),
+     ylab = "Stress",
+     xlab = "Number of Dimensions",
+     main = "Quarry Fire",
+     las = 1,
+     pch = 16)
+abline(h = 0.2)
+
+stressplot(NMDSord.q,
+           main = "Quarry")
+plot(ord.nmds.stress.sc,
+     ylim = c(0,1),
+     ylab = "Stress",
+     xlab = "Number of Dimensions",
+     main = "Stone Canyon",
+     las = 1,
+     pch = 16)
+abline(h = 0.2)
+
+stressplot(NMDSord.sc,
+           main = "Stone Canyon")
+dev.off()
+
+
 par(mfrow = c(2,2))
+
+
+
+
+jpeg(here("output/NMDS.jpeg"), width = 700, height = 600)
+par(mfrow = c(2,2), cex.main = 1.25, cex.lab = 1.25, cex.axis=1.25, cex=1)
+
 ## a - severity
 plot(NMDSord.q, type = "n",display = "sites", las = 1) 
 points(NMDSord.q, display = "sites", pch = 19, cex = .75, col = pal[as.factor(env.q$sev)])
-vectors <- envfit(NMDSord.q, env.q[,c(11,14:19)],na.rm = TRUE)
+vectors <- envfit(NMDSord.q, env.q[,c("NO3", "NH4", "PO4", "total cover", "total richness", "prop. invasive cover",  "prop. invasive species")], na.rm = TRUE)
 ordiellipse(NMDSord.q, display = "sites", env.q$sev, draw = "lines",
             col = pal, label = FALSE) ## ellipses based on slide exposure
 plot(vectors, col = "black")
@@ -1907,7 +1576,7 @@ plot(vectors, col = "black")
 ## b - fire retardant
 plot(NMDSord.q, type = "n",display = "sites", las = 1) 
 points(NMDSord.q, display = "sites", pch = 19, cex = .75, col = pal2[as.factor(env.q$trt)])
-vectors <- envfit(NMDSord.q, env.q[,c(11,14:19)],na.rm = TRUE)
+vectors <- envfit(NMDSord.q, env.q[,c("NO3", "NH4", "PO4", "total cover", "total richness", "prop. invasive cover",  "prop. invasive species")], na.rm = TRUE)
 ordiellipse(NMDSord.q, display = "sites", env.q$trt, draw = "lines",
             col = pal2, label = FALSE) ## ellipses based on slide exposure
 plot(vectors, col = "black")
@@ -1916,7 +1585,7 @@ plot(vectors, col = "black")
 ## c - severity
 plot(NMDSord.sc, type = "n",display = "sites", las = 1) 
 points(NMDSord.sc, display = "sites", pch = 19, cex = .75, col = pal[as.factor(env.sc$sev)])
-vectors <- envfit(NMDSord.sc, env.sc[,c(11,14:19)],na.rm = TRUE)
+vectors <- envfit(NMDSord.sc, env.sc[,c("NO3", "NH4", "PO4", "total cover", "total richness", "prop. invasive cover",  "prop. invasive species")], na.rm = TRUE)
 ordiellipse(NMDSord.sc, display = "sites", env.sc$sev, draw = "lines",
             col = pal, label = FALSE) ## ellipses based on slide exposure
 plot(vectors, col = "black")
@@ -1925,103 +1594,10 @@ plot(vectors, col = "black")
 ## d - fire retardant
 plot(NMDSord.sc, type = "n",display = "sites", las = 1) 
 points(NMDSord.sc, display = "sites", pch = 19, cex = .75, col = pal2[as.factor(env.sc$trt)])
-vectors <- envfit(NMDSord.sc, env.sc[,c(11,14:19)],na.rm = TRUE)
+vectors <- envfit(NMDSord.sc, env.sc[,c("NO3", "NH4", "PO4", "total cover", "total richness", "prop. invasive cover",  "prop. invasive species")], na.rm = TRUE)
 ordiellipse(NMDSord.sc, display = "sites", env.sc$trt, draw = "lines",
             col = pal2, label = FALSE) ## ellipses based on slide exposure
 plot(vectors, col = "black")
 # legend("bottomright", legend = c("Control", "Fire Retardant"), col = pal2, pch = 15, cex = 1, ncol = 2, bty = "n")
+dev.off()
 
-rm(i);rm(ord.nmds.stress.q);rm(pal);rm(pal2);rm(se);rm(vectors);rm(Quarry)
-rm(SC);rm(env.q);rm(env.sc);rm(NMDSord.q)
-rm(NMDSord.sc);rm(ord.nmds.stress.sc);rm(mod);rm(preds);rm(newdata)
-
-
-#### Supplemental Table Species Frequencies ####
-summary.table(comm.sum.long)
-table(comm.sum.long$plot)
-sc.summ <- comm.sum.long[grep("SC",comm.sum.long$plot),]
-table(sc.summ$plot)
-sc.summ$plot <- substr(sc.summ$plot,1,3)
-sc.summ$plotavg <- ifelse(sc.summ$plotavg >0,1,0)
-sc.summ.agg <- aggregate(plotavg ~ code + plot, data = sc.summ, FUN = sum)
-table(sc.summ.agg$plot)
-
-`%notin%` <- purrr::negate(`%in%`)
-row_select <- 1:nrow(comm.sum.long)
-row_select %notin% grep("SC",comm.sum.long$plot)
-q.summ <- comm.sum.long[row_select %notin% grep("SC",comm.sum.long$plot),]
-table(q.summ$plot)
-q.summ$plot <- substr(q.summ$plot,1,2)
-q.summ$plotavg <- ifelse(q.summ$plotavg >0,1,0)
-q.summ.agg <- aggregate(plotavg ~ code + plot, data = q.summ, FUN = sum)
-table(q.summ.agg$plot)
-
-q.summ.agg <- q.summ.agg[order(q.summ.agg$plot, q.summ.agg$plotavg, decreasing = TRUE),]
-sc.summ.agg<- sc.summ.agg[order(sc.summ.agg$plot, sc.summ.agg$plotavg, decreasing = TRUE),]
-
-codes <- c(q.summ.agg$code[q.summ.agg$plot == "HC"][1:10],
-           q.summ.agg$code[q.summ.agg$plot == "HF"][1:10],
-           q.summ.agg$code[q.summ.agg$plot == "LC"][1:10],
-           q.summ.agg$code[q.summ.agg$plot == "LF"][1:10],
-           q.summ.agg$code[q.summ.agg$plot == "MC"][1:10],
-           q.summ.agg$code[q.summ.agg$plot == "MF"][1:10],
-           q.summ.agg$code[q.summ.agg$plot == "UC"][1:10],
-           q.summ.agg$code[q.summ.agg$plot == "UF"][1:10],
-           sc.summ.agg$code[sc.summ.agg$plot == "SCC"][1:10],
-           sc.summ.agg$code[sc.summ.agg$plot == "SCB"][1:10],
-           sc.summ.agg$code[sc.summ.agg$plot == "SCF"][1:10])
-length(unique(codes)) ## 47 species are the top 10 across all plots
-
-freqs <- c(q.summ.agg$plotavg[q.summ.agg$plot == "HC"][1:10],
-           q.summ.agg$plotavg[q.summ.agg$plot == "HF"][1:10],
-           q.summ.agg$plotavg[q.summ.agg$plot == "LC"][1:10],
-           q.summ.agg$plotavg[q.summ.agg$plot == "LF"][1:10],
-           q.summ.agg$plotavg[q.summ.agg$plot == "MC"][1:10],
-           q.summ.agg$plotavg[q.summ.agg$plot == "MF"][1:10],
-           q.summ.agg$plotavg[q.summ.agg$plot == "UC"][1:10],
-           q.summ.agg$plotavg[q.summ.agg$plot == "UF"][1:10],
-           sc.summ.agg$plotavg[sc.summ.agg$plot == "SCC"][1:10],
-           sc.summ.agg$plotavg[sc.summ.agg$plot == "SCB"][1:10],
-           sc.summ.agg$plotavg[sc.summ.agg$plot == "SCF"][1:10])
-
-sites <- c(rep("Quarry", 80), rep("SC",30))
-trt <- c(rep("HC",10),
-         rep("HFR",10),
-         rep("LC",10),
-         rep("LFR",10),
-         rep("MC",10),
-         rep("MFR",10),
-         rep("UC",10),
-         rep("UFR",10),
-         rep("SCB",10),
-         rep("SCU",10),
-         rep("SCFR",10))
-
-summ.table.df <- data.frame(site = sites,
-                            trt = trt,
-                            species = codes,
-                            freq = freqs,
-                            duration = NA,
-                            status = NA,
-                            FG = NA)
-summ.table.df <- summ.table.df[order(summ.table.df$site,summ.table.df$trt,summ.table.df$freq, decreasing = TRUE),]
-summ.table.df$duration <- sp.info$duration[match(summ.table.df$species, sp.info$code)]
-summ.table.df$status <- sp.info$status[match(summ.table.df$species, sp.info$code)]
-summ.table.df$FG <- sp.info$functional.group[match(summ.table.df$species, sp.info$code)]
-
-summ.table.sp <- aggregate(freq ~ species, summ.table.df, sum)
-summ.table.sp$sites <- NA
-summ.table.sp$trs <- NA
-
-for(i in 1:nrow(summ.table.sp)){
-  summ.table.sp$sites[i] <- paste(unique(summ.table.df$site[summ.table.df$species == summ.table.sp$species[i]]), collapse = ", ")
-  summ.table.sp$trs[i] <- paste(unique(summ.table.df$trt[summ.table.df$species == summ.table.sp$species[i]]), collapse = ", ")
-  
-}
-
-summ.table.sp <- summ.table.sp[order(summ.table.sp$freq, decreasing = TRUE),]
-summ.table.sp$duration <- sp.info$duration[match(summ.table.sp$species, sp.info$code)]
-summ.table.sp$status <- sp.info$status[match(summ.table.sp$species, sp.info$code)]
-summ.table.sp$FG <- sp.info$functional.group[match(summ.table.sp$species, sp.info$code)]
-summ.table.sp$name <- sp.info$species[match(summ.table.sp$species, sp.info$code)]
- # write.csv(summ.table.sp, "C:/Users/trevo/Dropbox/My PC (LAPTOP-GI7LHD15)/Documents/Carter/Research/Papers/In Progress/Fire Retardant Veg and Soils/Figures/SpeciesSummaryTable.csv")

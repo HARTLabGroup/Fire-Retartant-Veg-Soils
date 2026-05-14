@@ -1,0 +1,37 @@
+site,Burn.Severity,community,control,treated,difference,pchange
+quarry,unburned,plot.cov,45.0 ± 20.8,66.1 ± 22.5,21.17,47
+quarry,low,plot.cov,55.1 ± 27.0,34.2 ± 26.0,-20.87,-38
+quarry,moderate,plot.cov,33.3 ± 34.8,61.0 ± 48.4,27.66,83
+quarry,high,plot.cov,33.5 ± 32.2,9.9 ± 14.0,-23.54,-70
+quarry,unburned,plot.rich,14.4 ± 4.8,22.6 ± 7.9,8.14,56
+quarry,low,plot.rich,25.4 ± 6.1,21.6 ± 6.6,-3.86,-15
+quarry,moderate,plot.rich,23.7 ± 9.8,24.7 ± 2.7,0.95,4
+quarry,high,plot.rich,17.3 ± 5.9,13.6 ± 4.0,-3.71,-21
+quarry,unburned,prop.ann.cov,0.03 ± 0.04,0.08 ± 0.13,0.06,203
+quarry,low,prop.ann.cov,0.35 ± 0.18,0.53 ± 0.32,0.18,53
+quarry,moderate,prop.ann.cov,0.34 ± 0.26,0.48 ± 0.18,0.14,41
+quarry,high,prop.ann.cov,0.45 ± 0.35,0.66 ± 0.35,0.21,46
+quarry,unburned,prop.ann.sp,0.16 ± 0.19,0.16 ± 0.05,0.01,4
+quarry,low,prop.ann.sp,0.30 ± 0.11,0.36 ± 0.13,0.07,23
+quarry,moderate,prop.ann.sp,0.37 ± 0.10,0.39 ± 0.12,0.02,6
+quarry,high,prop.ann.sp,0.45 ± 0.08,0.42 ± 0.11,-0.02,-5
+quarry,unburned,prop.inv.cov,0.00 ± 0.01,0.03 ± 0.03,0.02,518
+quarry,low,prop.inv.cov,0.36 ± 0.31,0.15 ± 0.20,-0.21,-59
+quarry,moderate,prop.inv.cov,0.21 ± 0.24,0.30 ± 0.25,0.09,45
+quarry,high,prop.inv.cov,0.17 ± 0.33,0.36 ± 0.35,0.19,109
+quarry,unburned,prop.inv.sp,0.10 ± 0.09,0.17 ± 0.06,0.07,69
+quarry,low,prop.inv.sp,0.24 ± 0.05,0.19 ± 0.15,-0.05,-20
+quarry,moderate,prop.inv.sp,0.26 ± 0.09,0.28 ± 0.06,0.03,10
+quarry,high,prop.inv.sp,0.26 ± 0.06,0.23 ± 0.07,-0.03,-12
+sc,unburned,plot.cov,51.2 ± 23.8,NA,NA,NA
+sc,low,plot.cov,31.4 ± 12.0,56.2 ± 34.2,24.77,79
+sc,unburned,plot.rich,30.1 ± 4.2,NA,NA,NA
+sc,low,plot.rich,32.0 ± 4.0,31.7 ± 8.0,-0.28,-1
+sc,unburned,prop.ann.cov,0.33 ± 0.35,NA,NA,NA
+sc,low,prop.ann.cov,0.21 ± 0.25,0.34 ± 0.26,0.13,61
+sc,unburned,prop.ann.sp,0.22 ± 0.05,NA,NA,NA
+sc,low,prop.ann.sp,0.23 ± 0.07,0.29 ± 0.08,0.06,26
+sc,unburned,prop.inv.cov,0.37 ± 0.34,NA,NA,NA
+sc,low,prop.inv.cov,0.21 ± 0.26,0.29 ± 0.26,0.08,40
+sc,unburned,prop.inv.sp,0.21 ± 0.05,NA,NA,NA
+sc,low,prop.inv.sp,0.18 ± 0.06,0.22 ± 0.08,0.04,25

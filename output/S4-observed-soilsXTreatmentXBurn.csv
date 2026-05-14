@@ -1,4 +1,4 @@
-site,Burn.Severity,nutrient,control,treated,difference,pchange
+site,Burn.Severity,nutrient,control,treated,adifference,pchange
 quarry,unburned,K,0.643 ± 0.231,0.716 ± 0.240,0.072,11
 quarry,low,K,0.883 ± 0.252,0.624 ± 0.109,-0.259,-29
 quarry,moderate,K,0.845 ± 0.161,0.743 ± 0.159,-0.102,-12
