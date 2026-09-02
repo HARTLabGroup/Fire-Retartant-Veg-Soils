@@ -202,6 +202,29 @@ rm(PERMANOVA.comm);rm(dist_matrix.comm);rm(dispersion.comm)
 rm(PERMANOVA.soil);rm(dist_matrix.soil);rm(dispersion.soil)
 rm(comm.dat);rm(soils.dat);rm(trt);rm(sev);rm(sites)
 
+#### Summary Stats of Fire-Retardant ####
+q.fr <- read.csv("./data/Quarry_aerialDrops.csv")
+sc.fr <- read.csv("./data/StoneCanyon_aerialDrops.csv")
+
+mean(q.fr$Shape_Leng)
+sd(q.fr$Shape_Leng)
+mean(sc.fr$Shape_Leng)
+sd(sc.fr$Shape_Leng)
+
+mean(q.fr$GalDropped)*3.785
+sd(q.fr$GalDropped)*3.785
+mean(sc.fr$GalDropped)*3.785
+sd(sc.fr$GalDropped)*3.785
+
+## some quick math to look at L per area (for comparison w/ fertilzation)
+## quarry
+(mean(q.fr$GalDropped)*3.785)/(235*10000)
+(mean(q.fr$GalDropped)*3.785)/(mean(q.fr$Shape_Leng))
+
+(mean(sc.fr$GalDropped)*3.785)/(627*10000)
+(mean(sc.fr$GalDropped)*3.785)/(mean(sc.fr$Shape_Leng))
+
+
 #### Question 1 ####
 ## SOILS Data question
 ## How does fire retardant application influence soil nitrogen and 
